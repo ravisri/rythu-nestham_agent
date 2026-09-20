@@ -31,7 +31,9 @@ An AI Agent application empowering farmers in Telangana & Andhra Pradesh. The ap
 - `app/page.tsx` — Main Telugu Voice & Camera UI built with `shadcn/ui`
 - `components/ui/` — `shadcn/ui` primitive components (`button.tsx`, `card.tsx`, `input.tsx`)
 - `lib/supabase.ts` — Supabase client configuration for pgvector searches
-- `scripts/ingest-pdf.py` — Python vector ingestion script for ANGRAU/ICAR PDF data
+- `scripts/ingest-pdf.ts` — TypeScript ingestion (`npm run ingest`) for ANGRAU/ICAR files in `data/pdfs/<crop>/`; Gemini `gemini-embedding-001` @768 dims → `crop_knowledge`
+- `lib/rag.ts` — embedding + `match_crop_knowledge` search (banned-pesticide sentences redacted via `lib/banned-pesticides.ts`)
+- `components/chat/` — Telugu chat UI (AI Elements + shadcn); `hooks/` — Web Speech STT/TTS (`te-IN`)
 
 ---
 
