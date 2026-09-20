@@ -185,7 +185,7 @@ function ChatInner() {
   const bodySize = largeText ? "text-xl" : "text-base"
 
   return (
-    <div className="mx-auto flex h-dvh max-w-2xl flex-col">
+    <div className="mx-auto flex h-dvh max-w-2xl flex-col bg-muted dark:bg-background">
       <header className="flex items-center gap-3 border-b bg-background/80 px-4 py-3 backdrop-blur">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <SproutIcon className="size-6" />

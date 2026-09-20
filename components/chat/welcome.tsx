@@ -101,12 +101,12 @@ export function Welcome({
         <p className="text-sm font-medium text-muted-foreground">
           ఉదాహరణలు — నొక్కండి:
         </p>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
           {EXAMPLES.map(({ icon: Icon, label, text }) => (
             <Button
               key={label}
               variant="outline"
-              className="h-auto min-h-14 justify-start gap-3 rounded-xl px-3 py-3 text-left text-base whitespace-normal"
+              className="h-auto min-h-14 justify-start gap-3 rounded-xl p-1.5 sm:p-3 text-left text-base whitespace-normal"
               onClick={() => onPick(text)}
             >
               <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
