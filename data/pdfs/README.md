@@ -10,3 +10,6 @@ chapter to a crop and topic (see `general/Vyavasaya Panchangam 2022-2023.json`):
 
 Run one crop at a time with `npm run ingest -- --crop paddy`. OCR text is cached in `data/ocr/`,
 so an interrupted run (e.g. free-tier daily limit) continues where it stopped.
+
+Re-running `npm run ingest` skips sections that are already stored; add `-- --force` to redo them
+(e.g. after changing page numbers in a manifest).

@@ -1,5 +1,7 @@
 // Usage: npm run ingest                  (all files under data/pdfs/<crop>/*.pdf|txt|md)
 //        npm run ingest -- --crop paddy  (only paddy sections / folders)
+//        npm run ingest -- --force       (redo sections that are already stored)
+// Re-running continues where it stopped: stored sections are skipped, OCR pages come from data/ocr/.
 // Needs in .env.local: GOOGLE_GENERATIVE_AI_API_KEY, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 // Optional: OCR_MODEL (default gemini-2.5-flash).
 // Optional manifest "<pdf name>.json" next to a PDF:
@@ -28,6 +30,7 @@ const EMBED_PAUSE_MS = 20_000
 const ONLY_CROP = process.argv.includes("--crop")
   ? process.argv[process.argv.indexOf("--crop") + 1]
   : undefined
+const FORCE = process.argv.includes("--force")
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 type Section = {
@@ -65,13 +68,17 @@ function chunk(text: string): string[] {
   return chunks
 }
 
+class DailyLimitError extends Error {}
+
 async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await fn()
     } catch (error) {
+      const message = String((error as Error)?.message ?? error)
+      if (/PerDay|per day/i.test(message)) throw new DailyLimitError(message)
       if (attempt >= 5) throw error
-      const reason = String((error as Error)?.message ?? error).slice(0, 120)
+      const reason = message.slice(0, 120)
       console.log(`  ${label} retry ${attempt}: ${reason}`)
       await sleep(30_000 * attempt) // rate limits reset per minute
     }
@@ -261,6 +268,18 @@ async function store(
   }
 }
 
+async function isStored(job: Job, source: string): Promise<boolean> {
+  const query = getSupabase()
+    .from("crop_knowledge")
+    .select("id", { count: "exact", head: true })
+    .eq("metadata->>source", source)
+  const { count, error } = job.section
+    ? await query.eq("metadata->>section", job.section)
+    : await query
+  if (error) throw error
+  return (count ?? 0) > 0
+}
+
 async function ingest(file: string, folderCrop: string) {
   const manifest = await readManifest(file)
   const source = manifest.source ?? path.basename(file)
@@ -273,11 +292,16 @@ async function ingest(file: string, folderCrop: string) {
   )
 
   const isPdf = path.extname(file).toLowerCase() === ".pdf"
-  const reader = isPdf ? await PdfReader.open(file) : undefined
+  let reader: PdfReader | undefined
 
   for (const job of jobs) {
     const label = `${job.crop}${job.topic ? `/${job.topic}` : ""}`
     console.log(`  ${label}${job.section ? ` — ${job.section}` : ""}`)
+    if (!FORCE && (await isStored(job, source))) {
+      console.log("    already stored, skipped (use --force to redo)")
+      continue
+    }
+    if (isPdf) reader ??= await PdfReader.open(file)
     // Short header on every piece: better retrieval for ~10 tokens.
     const header = `${CROPS[job.crop as keyof typeof CROPS] ?? job.crop} (${label}): `
 
@@ -286,8 +310,9 @@ async function ingest(file: string, folderCrop: string) {
       const text = await readFile(file, "utf8")
       pieces.push(...chunk(text).map((c) => ({ content: header + c })))
     } else {
-      const all = Array.from({ length: reader.pageCount }, (_, i) => i + 1)
-      const pages = (job.pdfPages ?? all).filter((p) => p <= reader.pageCount)
+      const total = reader.pageCount
+      const all = Array.from({ length: total }, (_, i) => i + 1)
+      const pages = (job.pdfPages ?? all).filter((p) => p <= total)
       // Batches never cross a section, so every piece belongs to one crop.
       for (let i = 0; i < pages.length; i += OCR_PAGES_PER_CALL) {
         const batch = pages.slice(i, i + OCR_PAGES_PER_CALL)
@@ -326,6 +351,12 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error)
+  if (error instanceof DailyLimitError) {
+    console.error(
+      "\nDaily Gemini limit reached — progress is saved, run npm run ingest again tomorrow."
+    )
+  } else {
+    console.error(error)
+  }
   process.exit(1)
 })
