@@ -1,6 +1,7 @@
 import { google } from "@ai-sdk/google"
 import { embed, embedMany } from "ai"
 import { redactBanned } from "@/lib/banned-pesticides"
+import type { Crop } from "@/lib/crops"
 import { getSupabase } from "@/lib/supabase"
 
 const model = google.textEmbeddingModel("gemini-embedding-001")
@@ -30,17 +31,24 @@ export async function embedDocuments(texts: string[]): Promise<number[][]> {
 
 type Match = {
   content: string
-  metadata: { crop?: string; source?: string } | null
+  metadata: {
+    crop?: string
+    topic?: string
+    source?: string
+    pages?: string
+  } | null
 }
 
-const MAX_CHARS = 900
+const MAX_CHARS = 1000
 
-export async function searchKnowledge(query: string) {
+// With a known crop, only that crop's text plus general advice is searched.
+export async function searchKnowledge(query: string, crop?: Crop) {
   try {
     const { data, error } = await getSupabase().rpc("match_crop_knowledge", {
       query_embedding: await embedQuery(query),
-      match_threshold: 0.5,
+      match_threshold: 0.6, // relevant Telugu matches ~0.7+, off-topic ~0.5
       match_count: 3,
+      crops: crop && crop !== "general" ? [crop, "general"] : null,
     })
     if (error) throw error
 
@@ -48,7 +56,9 @@ export async function searchKnowledge(query: string) {
       .map((row) => ({
         text: redactBanned(row.content).slice(0, MAX_CHARS),
         crop: row.metadata?.crop,
+        topic: row.metadata?.topic,
         source: row.metadata?.source,
+        pages: row.metadata?.pages,
       }))
       .filter((r) => r.text.length > 0)
 

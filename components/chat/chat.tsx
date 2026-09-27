@@ -65,14 +65,19 @@ const textOf = (message: UIMessage) =>
 
 const toolPart = (message: UIMessage) =>
   message.parts.find((p) => p.type === "tool-queryCropKnowledgeBase") as
-    | ToolPart
-    | undefined
+    ToolPart | undefined
 
 function sourcesOf(message: UIMessage): string[] {
   const tool = toolPart(message)
   if (tool?.state !== "output-available") return []
-  const results = (tool.output as { results?: { source?: string }[] }).results
-  return [...new Set((results ?? []).flatMap((r) => (r.source ? [r.source] : [])))]
+  const results = (
+    tool.output as { results?: { source?: string; pages?: string }[] }
+  ).results
+  const label = (r: { source?: string; pages?: string }) =>
+    r.pages ? `${r.source} · p. ${r.pages}` : r.source!
+  return [
+    ...new Set((results ?? []).flatMap((r) => (r.source ? [label(r)] : []))),
+  ]
 }
 
 function progressLabel(last: UIMessage | undefined): string {
@@ -88,8 +93,12 @@ function ChatInner() {
   const { messages, sendMessage, status, error, stop } = useChat({ transport })
   const controller = usePromptInputController()
   const attachments = usePromptInputAttachments()
-  const { supported: canSpeak, speakingId, speak, stop: stopSpeech } =
-    useSpeechSynthesis()
+  const {
+    supported: canSpeak,
+    speakingId,
+    speak,
+    stop: stopSpeech,
+  } = useSpeechSynthesis()
   const { setTheme, resolvedTheme } = useTheme()
   const [autoSpeak, setAutoSpeak] = useState(true)
   const [largeText, setLargeText] = useState(false)
@@ -213,7 +222,9 @@ function ChatInner() {
             size="icon"
             className="size-10 rounded-xl"
             aria-label="లైట్ / డార్క్"
-            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+            onClick={() =>
+              setTheme(resolvedTheme === "dark" ? "light" : "dark")
+            }
           >
             <SunIcon className="hidden dark:block" />
             <MoonIcon className="dark:hidden" />
@@ -255,7 +266,7 @@ function ChatInner() {
               const content = (
                 <Message from={message.role} className="max-w-full">
                   <MessageContent
-                    className={`${bodySize} leading-relaxed group-[.is-user]:rounded-2xl group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground group-[.is-assistant]:rounded-2xl group-[.is-assistant]:border group-[.is-assistant]:bg-card group-[.is-assistant]:px-4 group-[.is-assistant]:py-3`}
+                    className={`${bodySize} leading-relaxed group-[.is-assistant]:rounded-2xl group-[.is-assistant]:border group-[.is-assistant]:bg-card group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-user]:rounded-2xl group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground`}
                   >
                     {images.map((image, i) => (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -391,7 +402,8 @@ function ChatInner() {
           </PromptInputFooter>
         </PromptInput>
         <p className="text-center text-xs text-muted-foreground">
-          AI సలహా మాత్రమే. మందులు వాడే ముందు స్థానిక వ్యవసాయ అధికారిని సంప్రదించండి.
+          AI సలహా మాత్రమే. మందులు వాడే ముందు స్థానిక వ్యవసాయ అధికారిని
+          సంప్రదించండి.
         </p>
       </div>
     </div>

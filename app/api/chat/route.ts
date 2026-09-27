@@ -8,6 +8,7 @@ import {
 } from "ai"
 import { z } from "zod"
 import { BANNED_PROMPT_LIST } from "@/lib/banned-pesticides"
+import { toCrop } from "@/lib/crops"
 import { searchKnowledge } from "@/lib/rag"
 
 export const maxDuration = 30
@@ -16,7 +17,7 @@ const SYSTEM_PROMPT = `You are Rythu Nestham, a crop advisor for farmers in Tela
 Reply ONLY in simple, short Telugu (max 6 short sentences). It is read aloud.
 Answer format: **సమస్య:** one sentence. **పరిష్కారం:** 2-3 "-" bullets. **జాగ్రత్త:** one sentence. (If you need more details, just ask one short question instead.)
 1. Identify the crop and problem from the text or photo. If unclear, ask ONE short Telugu follow-up question instead of guessing.
-2. For any disease, pest, nutrient, pesticide or dose question, FIRST call queryCropKnowledgeBase with a short ENGLISH query (crop + symptoms/pest), writing no text before the call.
+2. For any disease, pest, nutrient, pesticide or dose question, FIRST call queryCropKnowledgeBase with a short TELUGU query using Telugu crop and problem names (e.g. "వరి అగ్గి తెగులు నివారణ") and the English crop name, writing no text before the call.
 3. Answer from the returned text only. Prefer low-cost, locally available or organic options (neem oil, Trichoderma, pheromone traps, cultural practices); suggest a chemical only if needed, with the dose from the text. If nothing useful is returned, give only general safe advice with no doses and tell the farmer to contact the local Rythu Bharosa Kendram / KVK.
 4. Never suggest banned or dangerous pesticides (${BANNED_PROMPT_LIST}). Never invent doses.`
 
@@ -25,9 +26,14 @@ const tools = {
     description:
       "Search ANGRAU/ICAR crop guides. Call before answering any crop disease, pest, nutrient, pesticide or dosage question.",
     inputSchema: z.object({
-      query: z.string().describe("Short English query: crop + symptoms or pest"),
+      query: z
+        .string()
+        .describe(
+          "Short Telugu query: crop + symptoms or pest (guides are in Telugu)"
+        ),
+      crop: z.string().optional().describe("English crop name if known"),
     }),
-    execute: async ({ query }) => searchKnowledge(query),
+    execute: async ({ query, crop }) => searchKnowledge(query, toCrop(crop)),
   }),
 }
 
