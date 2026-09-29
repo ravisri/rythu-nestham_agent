@@ -29,10 +29,20 @@ function required(name: string): string {
   return value
 }
 
-// "anthropic:claude-haiku-4-5" -> ["anthropic", "claude-haiku-4-5"]; bare names are Google.
+// Bare model names: provider inferred from the official model id prefix.
+function inferProvider(model: string): ProviderName {
+  if (/^claude-/.test(model)) return "anthropic"
+  if (/^(gpt-|o\d|text-embedding-)/.test(model)) return "openai"
+  if (/^gemini-/.test(model)) return "google"
+  throw new Error(
+    `Unknown model "${model}". Use "provider:model", e.g. anthropic:claude-haiku-4-5`
+  )
+}
+
+// "anthropic:claude-haiku-4-5" -> ["anthropic", "claude-haiku-4-5"]
 function parse(id: string): [ProviderName, string] {
   const i = id.indexOf(":")
-  const name = (i < 0 ? "google" : id.slice(0, i)) as ProviderName
+  const name = (i < 0 ? inferProvider(id) : id.slice(0, i)) as ProviderName
   if (!(name in providers)) {
     throw new Error(
       `Unknown provider "${name}" in "${id}". Use: ${Object.keys(providers).join(", ")}`

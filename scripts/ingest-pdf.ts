@@ -1,6 +1,7 @@
 // Usage: npm run ingest                  (all files under data/pdfs/<crop>/*.pdf|txt|md)
 //        npm run ingest -- --crop paddy  (only paddy sections / folders)
 //        npm run ingest -- --force       (redo sections that are already stored)
+//        npm run ingest -- --ocr-only    (only fill the OCR cache, no embedding / DB writes)
 // Re-running continues where it stopped: stored sections are skipped, OCR pages come from data/ocr/.
 // Needs in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and the API key
 // for the OCR_MODEL / EMBEDDING_MODEL providers (default Google: GOOGLE_GENERATIVE_AI_API_KEY).
@@ -10,7 +11,7 @@
 //   splits a multi-crop book; "pages" are printed page numbers (PDF page = printed + pageOffset).
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { generateText } from "ai"
+import { APICallError, generateText, RetryError } from "ai"
 import { PDFDocument } from "pdf-lib"
 import { extractText, getDocumentProxy } from "unpdf"
 import { ocrModel, reasoningOptions } from "@/lib/ai"
@@ -30,6 +31,7 @@ const ONLY_CROP = process.argv.includes("--crop")
   ? process.argv[process.argv.indexOf("--crop") + 1]
   : undefined
 const FORCE = process.argv.includes("--force")
+const OCR_ONLY = process.argv.includes("--ocr-only")
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 type Section = {
@@ -76,7 +78,11 @@ async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
     } catch (error) {
       const message = String((error as Error)?.message ?? error)
       if (/PerDay|per day/i.test(message)) throw new DailyLimitError(message)
-      if (attempt >= 5) throw error
+      // Bad model name / API key / request won't fix itself: fail now.
+      const retryable =
+        RetryError.isInstance(error) ||
+        (APICallError.isInstance(error) && error.isRetryable)
+      if (!retryable || attempt >= 5) throw error
       const reason = message.slice(0, 120)
       console.log(`  ${label} retry ${attempt}: ${reason}`)
       await sleep(30_000 * attempt) // rate limits reset per minute
@@ -162,7 +168,8 @@ class PdfReader {
     const pdf = await getDocumentProxy(bytes.slice())
     const { text, totalPages } = await extractText(pdf, { mergePages: false })
     const needsOcr = looksGarbled(text.join("\n"), totalPages)
-    if (needsOcr) console.log("  text extraction poor, using Gemini OCR")
+    if (needsOcr)
+      console.log(`  text extraction poor, using OCR (${ocrModel().modelId})`)
     return new PdfReader(file, bytes, text, needsOcr)
   }
 
@@ -207,7 +214,9 @@ class PdfReader {
             content: [
               {
                 type: "text",
-                text: "Extract all text from this document faithfully. Keep Telugu as Telugu and English as English. Keep table rows on one line each. Output plain text only.",
+                // Claude also receives the PDF text layer, which is garbled for
+                // legacy Telugu fonts — tell it to read the page images instead.
+                text: "Transcribe the page IMAGES faithfully. Ignore the PDF's embedded text layer: it may use a broken legacy font encoding (looks like 'X¯óuÛÑø£'). Write Telugu in Unicode Telugu script and English as English. Keep table rows on one line each, no markdown tables. Output plain text only.",
               },
               { type: "file", data, mediaType: "application/pdf" },
             ],
@@ -291,6 +300,7 @@ async function ingest(file: string, folderCrop: string) {
   )
 
   const isPdf = path.extname(file).toLowerCase() === ".pdf"
+  if (OCR_ONLY && !isPdf) return
   let reader: PdfReader | undefined
 
   for (const job of jobs) {
@@ -325,6 +335,10 @@ async function ingest(file: string, folderCrop: string) {
       }
     }
 
+    if (OCR_ONLY) {
+      console.log("    OCR complete")
+      continue
+    }
     if (pieces.length === 0) {
       console.log("    no text found, skipped")
       continue
@@ -352,7 +366,7 @@ async function main() {
 main().catch((error) => {
   if (error instanceof DailyLimitError) {
     console.error(
-      "\nDaily Gemini limit reached — progress is saved, run npm run ingest again tomorrow."
+      "\nDaily API limit reached — progress is saved, run npm run ingest again tomorrow."
     )
   } else {
     console.error(error)
