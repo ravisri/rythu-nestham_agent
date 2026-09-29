@@ -1,12 +1,15 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import {
   CameraIcon,
   MicIcon,
   MoonIcon,
+  ShieldIcon,
   SproutIcon,
   SunIcon,
   Volume2Icon,
@@ -44,7 +47,9 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis"
+import { loadChat, saveChat } from "@/lib/chat-history"
 import { compressImage } from "@/lib/image"
+import { MESSAGES, type Usage } from "@/lib/plans"
 import { HelpDialog } from "./help-dialog"
 import { ListeningCard } from "./listening-card"
 import { Actions, Sources } from "./message-extras"
@@ -63,20 +68,44 @@ const textOf = (message: UIMessage) =>
     .join("\n")
     .trim()
 
+// The model sometimes writes "... **పరిష్కారం:** - a - b **జాగ్రత్త:** ..." on
+// one line: start each section label on its own paragraph.
+const formatAnswer = (text: string) =>
+  text
+    .replace(/[ \t]*(\*\*(?:సమస్య|పరిష్కారం|జాగ్రత్త):?\*\*:?)/g, "\n\n$1")
+    .trim()
+
+// Styles per rendered HTML tag inside the answer card.
+const ANSWER_STYLES = [
+  "[&_p]:my-2",
+  "[&_ul]:my-2 [&_ul]:list-outside [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-6",
+  "[&_ol]:my-2 [&_ol]:list-outside [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-6",
+  "[&_li]:pl-1 [&_li]:marker:text-primary [&_li>p]:my-0",
+  "[&_strong]:font-semibold [&_strong]:text-primary",
+].join(" ")
+
 const toolPart = (message: UIMessage) =>
   message.parts.find((p) => p.type === "tool-queryCropKnowledgeBase") as
     ToolPart | undefined
 
+type Source = { source?: string; pages?: string }
+// Sent by /api/chat with each reply.
+type ReplyMeta = { left?: number; sources?: Source[] }
+
+// Pre-searched reference (metadata) + any extra search the model made (tool).
 function sourcesOf(message: UIMessage): string[] {
   const tool = toolPart(message)
-  if (tool?.state !== "output-available") return []
-  const results = (
-    tool.output as { results?: { source?: string; pages?: string }[] }
-  ).results
-  const label = (r: { source?: string; pages?: string }) =>
+  const searched =
+    tool?.state === "output-available"
+      ? ((tool.output as { results?: Source[] }).results ?? [])
+      : []
+  const given = (message.metadata as ReplyMeta | undefined)?.sources ?? []
+  const label = (r: Source) =>
     r.pages ? `${r.source} · p. ${r.pages}` : r.source!
   return [
-    ...new Set((results ?? []).flatMap((r) => (r.source ? [label(r)] : []))),
+    ...new Set(
+      [...given, ...searched].flatMap((r) => (r.source ? [label(r)] : []))
+    ),
   ]
 }
 
@@ -89,8 +118,20 @@ function progressLabel(last: UIMessage | undefined): string {
     : "ANGRAU / ICAR లో వెతుకుతోంది…"
 }
 
-function ChatInner() {
-  const { messages, sendMessage, status, error, stop } = useChat({ transport })
+type ChatProps = { userId: string; isAdmin: boolean; usage: Usage }
+
+function ChatInner({
+  userId,
+  isAdmin,
+  usage,
+  initialMessages,
+}: ChatProps & { initialMessages: UIMessage[] }) {
+  const router = useRouter()
+  const { messages, sendMessage, status, error, stop } = useChat({
+    transport,
+    messages: initialMessages,
+  })
+  const [left, setLeft] = useState(usage.left)
   const controller = usePromptInputController()
   const attachments = usePromptInputAttachments()
   const {
@@ -113,6 +154,38 @@ function ChatInner() {
       setLargeText(localStorage.getItem("textSize") === "large")
     } catch {}
   }, [])
+
+  // Save finished conversations to this browser only.
+  useEffect(() => {
+    if (status === "ready" || status === "error") saveChat(userId, messages)
+  }, [status, messages, userId])
+
+  // Credits left from the newest reply (ignore replies loaded from storage).
+  useEffect(() => {
+    const last = messages[messages.length - 1]
+    const meta = last?.metadata as ReplyMeta | undefined
+    if (
+      messages.length > initialMessages.length &&
+      last.role === "assistant" &&
+      typeof meta?.left === "number"
+    ) {
+      setLeft(meta.left)
+    }
+  }, [messages, initialMessages.length])
+
+  // Limit reached -> 0 left; signed in on another phone -> back to login.
+  useEffect(() => {
+    const limits: string[] = [
+      MESSAGES.dailyLimit,
+      MESSAGES.periodLimit,
+      MESSAGES.trialLimit,
+    ]
+    if (error && limits.includes(error.message)) setLeft(0)
+    if (error?.message === MESSAGES.sessionEnded) {
+      const timer = setTimeout(() => router.replace("/login"), 2500)
+      return () => clearTimeout(timer)
+    }
+  }, [error, router])
 
   useEffect(() => {
     const finished = previousStatus.current !== "ready" && status === "ready"
@@ -194,7 +267,7 @@ function ChatInner() {
   const bodySize = largeText ? "text-xl" : "text-base"
 
   return (
-    <div className="mx-auto flex h-dvh max-w-2xl flex-col bg-muted dark:bg-background">
+    <div className="mx-auto flex h-dvh w-full flex-col bg-muted dark:bg-background">
       <header className="flex items-center gap-3 border-b bg-background/80 px-4 py-3 backdrop-blur">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <SproutIcon className="size-6" />
@@ -202,10 +275,26 @@ function ChatInner() {
         <div className="min-w-0 flex-1">
           <h1 className="text-lg leading-tight font-semibold">రైతు నేస్తం</h1>
           <p className="truncate text-sm text-muted-foreground">
-            పంట సమస్యకు సులభ పరిష్కారం
+            {usage.status === "active"
+              ? `${usage.planLabel} · మిగిలిన ప్రశ్నలు: ${left}`
+              : usage.status === "trial_over"
+                ? "ఉచిత ట్రయల్ ముగిసింది"
+                : "ప్లాన్ గడువు ముగిసింది"}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {isAdmin && (
+            <Button
+              asChild
+              variant="outline"
+              size="icon"
+              className="size-10 rounded-xl"
+            >
+              <Link href="/admin" aria-label="అడ్మిన్">
+                <ShieldIcon />
+              </Link>
+            </Button>
+          )}
           <HelpDialog />
           <Button
             variant="outline"
@@ -243,7 +332,7 @@ function ChatInner() {
         </div>
       </header>
 
-      <Conversation className="flex-1">
+      <Conversation className="flex-1 max-w-5xl mx-auto w-full">
         <ConversationContent className="gap-6">
           {messages.length === 0 ? (
             <ConversationEmptyState className="justify-start p-0">
@@ -282,8 +371,9 @@ function ChatInner() {
                     ) : (
                       <MessageResponse
                         isAnimating={busy && index === messages.length - 1}
+                        className={ANSWER_STYLES}
                       >
-                        {text}
+                        {formatAnswer(text)}
                       </MessageResponse>
                     )}
                   </MessageContent>
@@ -340,7 +430,7 @@ function ChatInner() {
           maxFiles={1}
           maxFileSize={10 * 1024 * 1024}
           onError={() => setNotice("ఒక ఫోటో మాత్రమే (10MB లోపు) పంపండి.")}
-          className="rounded-2xl"
+          className="rounded-2xl max-w-5xl mx-auto"
         >
           {attachments.files.length > 0 && (
             <PromptInputHeader>
@@ -410,10 +500,21 @@ function ChatInner() {
   )
 }
 
-export function Chat() {
+export function Chat(props: ChatProps) {
+  // localStorage is browser-only: load it before useChat mounts.
+  const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(
+    null
+  )
+  useEffect(() => {
+    setInitialMessages(loadChat(props.userId))
+  }, [props.userId])
+
+  if (!initialMessages) {
+    return <div className="h-dvh bg-muted dark:bg-background" />
+  }
   return (
     <PromptInputProvider>
-      <ChatInner />
+      <ChatInner {...props} initialMessages={initialMessages} />
     </PromptInputProvider>
   )
 }

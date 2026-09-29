@@ -34,6 +34,9 @@ An AI Agent application empowering farmers in Telangana & Andhra Pradesh. The ap
 - `scripts/ingest-pdf.ts` — TypeScript ingestion (`npm run ingest`) for ANGRAU/ICAR files in `data/pdfs/<crop>/`; Gemini `gemini-embedding-001` @768 dims → `crop_knowledge`
 - `lib/rag.ts` — embedding + `match_crop_knowledge` search (banned-pesticide sentences redacted via `lib/banned-pesticides.ts`)
 - `components/chat/` — Telugu chat UI (AI Elements + shadcn); `hooks/` — Web Speech STT/TTS (`te-IN`)
+- Accounts (custom, no Supabase Auth/OTP): `lib/auth.ts` (scrypt passwords, one-session-per-user httpOnly cookie), `app/login/` (login/sign-up/forgot Server Actions + UI), `app/admin/` (admin: create users, plans, password reset). Tables in `supabase/migrations/0003_accounts.sql` (RLS on, service-role only). Create/promote an admin: `npm run create-admin <username> <password> [phone]`
+- Plans & credits: `lib/plans.ts` (limits, IST days, Telugu messages), `lib/usage.ts` (`use_credits`/`add_usage` RPCs, charged in `app/api/chat/route.ts`). Chats are never stored server-side: `lib/chat-history.ts` (localStorage)
+- Forms: react-hook-form + zod; shared schemas in `lib/validation.ts` are re-checked in every Server Action
 
 ---
 

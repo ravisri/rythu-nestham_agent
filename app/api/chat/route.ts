@@ -7,6 +7,9 @@ import {
 } from "ai"
 import { z } from "zod"
 import { chatModel, reasoningOptions } from "@/lib/ai"
+import { getCurrentUser, renewSession } from "@/lib/auth"
+import { creditCost, MESSAGES, planStatus } from "@/lib/plans"
+import { chargeCredits, recordUsage, usageSummary } from "@/lib/usage"
 import { BANNED_PROMPT_LIST } from "@/lib/banned-pesticides"
 import { toCrop } from "@/lib/crops"
 import { searchKnowledge } from "@/lib/rag"
@@ -15,7 +18,13 @@ export const maxDuration = 30
 
 const SYSTEM_PROMPT = `You are Rythu Nestham, a crop advisor for farmers in Telangana and Andhra Pradesh.
 Reply ONLY in simple, short Telugu (max 6 short sentences). It is read aloud.
-Answer format: **సమస్య:** one sentence. **పరిష్కారం:** 2-3 "-" bullets. **జాగ్రత్త:** one sentence. (If you need more details, just ask one short question instead.)
+Answer format (each label on its own line, each bullet on a new line):
+**సమస్య:** one sentence.
+**పరిష్కారం:**
+- bullet 1
+- bullet 2 (max 3)
+**జాగ్రత్త:** one sentence.
+(If you need more details, just ask one short question instead.)
 1. Identify the crop and problem from the text or photo. If unclear, ask ONE short Telugu follow-up question instead of guessing.`
 
 const SEARCH_RULE = `2. For a photo, if the reference below does not cover the problem you see, FIRST call queryCropKnowledgeBase with a short TELUGU query using Telugu crop and problem names (e.g. "వరి అగ్గి తెగులు నివారణ") and the English crop name, writing no text before the call.`
@@ -100,7 +109,27 @@ function friendlyError(error: unknown): string {
   return "క్షమించండి, సమస్య వచ్చింది. దయచేసి మళ్లీ ప్రయత్నించండి."
 }
 
+// Plain-text Telugu error: the chat UI shows (and can read aloud) the body.
+const reply = (status: number, message: string) =>
+  new Response(message, {
+    status,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  })
+
+const LIMIT_MESSAGE = {
+  daily: MESSAGES.dailyLimit,
+  period: MESSAGES.periodLimit,
+} as const
+
 export async function POST(req: Request) {
+  const user = await getCurrentUser()
+  if (!user) return reply(401, MESSAGES.sessionEnded)
+
+  const status = planStatus(user)
+  if (status !== "active") {
+    return reply(403, status === "trial_over" ? MESSAGES.trialOver : MESSAGES.expired)
+  }
+
   const { messages }: { messages: UIMessage[] } = await req.json()
   const window = prune(messages)
 
@@ -108,11 +137,24 @@ export async function POST(req: Request) {
   // (free/small) models making a correct tool call. Photos keep the tool, since
   // the problem is only known after the model looks at the image.
   const last = window.at(-1)
-  const question = last?.role === "user" ? textOf(last) : ""
-  const hasImage = !!last?.parts.some((p) => p.type === "file")
-  const { results } = question
-    ? await searchKnowledge(searchQuery(window, question))
-    : { results: [] }
+  if (last?.role !== "user") return reply(400, friendlyError(""))
+  const question = textOf(last)
+  const hasImage = last.parts.some((p) => p.type === "file")
+
+  const cost = creditCost(hasImage)
+  const charged = await chargeCredits(user, cost)
+  if (charged !== "ok") {
+    const trial = user.plan === "trial" && charged === "period"
+    return reply(429, trial ? MESSAGES.trialLimit : LIMIT_MESSAGE[charged])
+  }
+  await renewSession()
+
+  const [{ results }, usage] = await Promise.all([
+    question
+      ? searchKnowledge(searchQuery(window, question))
+      : Promise.resolve({ results: [] }),
+    usageSummary(user),
+  ])
 
   const model = chatModel()
   const result = streamText({
@@ -124,7 +166,26 @@ export async function POST(req: Request) {
     maxOutputTokens: 1500,
     // Text answers come from the reference; only photos need some thinking.
     providerOptions: reasoningOptions(model.modelId, hasImage ? "low" : "none"),
+    onFinish: ({ totalUsage }) =>
+      recordUsage(
+        user.id,
+        0,
+        totalUsage.inputTokens ?? 0,
+        totalUsage.outputTokens ?? 0
+      ),
+    // The farmer got no answer: give the credits back.
+    onError: () => recordUsage(user.id, -cost),
   })
 
-  return result.toUIMessageStreamResponse({ onError: friendlyError })
+  return result.toUIMessageStreamResponse({
+    onError: friendlyError,
+    // Credits left (header badge) + sources of the pre-searched reference.
+    messageMetadata: ({ part }) =>
+      part.type === "start"
+        ? {
+            left: usage.left,
+            sources: results.map(({ source, pages }) => ({ source, pages })),
+          }
+        : undefined,
+  })
 }

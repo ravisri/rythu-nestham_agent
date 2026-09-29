@@ -53,7 +53,7 @@ export function Welcome({
   onPick: (text: string) => void
 }) {
   return (
-    <div className="flex flex-col gap-6 py-2">
+    <div className="flex flex-col gap-6 py-2 w-full">
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
           <SproutIcon className="size-9" />
