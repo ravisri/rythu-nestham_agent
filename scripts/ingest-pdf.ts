@@ -2,25 +2,24 @@
 //        npm run ingest -- --crop paddy  (only paddy sections / folders)
 //        npm run ingest -- --force       (redo sections that are already stored)
 // Re-running continues where it stopped: stored sections are skipped, OCR pages come from data/ocr/.
-// Needs in .env.local: GOOGLE_GENERATIVE_AI_API_KEY, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-// Optional: OCR_MODEL (default gemini-2.5-flash).
+// Needs in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and the API key
+// for the OCR_MODEL / EMBEDDING_MODEL providers (default Google: GOOGLE_GENERATIVE_AI_API_KEY).
 // Optional manifest "<pdf name>.json" next to a PDF:
 //   { "pages": "120-175" }  limits OCR to those PDF pages, or
 //   { "source", "state", "pageOffset", "sections": [{ crop, topic, title, pages | pdfPages, skip? }] }
 //   splits a multi-crop book; "pages" are printed page numbers (PDF page = printed + pageOffset).
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { google } from "@ai-sdk/google"
 import { generateText } from "ai"
 import { PDFDocument } from "pdf-lib"
 import { extractText, getDocumentProxy } from "unpdf"
+import { ocrModel, reasoningOptions } from "@/lib/ai"
 import { CROPS, isCrop } from "@/lib/crops"
 import { embedDocuments } from "@/lib/rag"
 import { getSupabase } from "@/lib/supabase"
 
 const ROOT = path.join(process.cwd(), "data", "pdfs")
 const OCR_CACHE = path.join(process.cwd(), "data", "ocr")
-const OCR_MODEL = process.env.OCR_MODEL || "gemini-2.5-flash"
 const OCR_PAGES_PER_CALL = 5
 const CHUNK_WORDS = 120 // ~800 Telugu chars; must fit MAX_CHARS in lib/rag.ts
 const OVERLAP_WORDS = 20
@@ -200,8 +199,8 @@ class PdfReader {
 
     const result = await withRetry("OCR", () =>
       generateText({
-        model: google(OCR_MODEL),
-        providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+        model: ocrModel(),
+        providerOptions: reasoningOptions(0),
         messages: [
           {
             role: "user",

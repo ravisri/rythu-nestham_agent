@@ -12,7 +12,7 @@ An AI Agent application empowering farmers in Telangana & Andhra Pradesh. The ap
 ## Tech Stack & Core Libraries
 - **Framework:** Next.js (App Router, TypeScript)
 - **Styling & UI:** Tailwind CSS, `shadcn/ui`, Lucide React Icons
-- **AI Agent Framework:** Vercel AI SDK (`ai`), `@ai-sdk/google` (Gemini 2.5 Flash)
+- **AI Agent Framework:** Vercel AI SDK (`ai`), default Gemini 2.5 Flash. Models are switchable via `CHAT_MODEL` / `OCR_MODEL` / `EMBEDDING_MODEL` (`provider:model`; google, openai, anthropic, OpenAI-compatible `compat`) — resolved in `lib/ai.ts`, documented in `.env.example`. Never import a provider directly elsewhere.
 - **Vector Database (RAG):** Supabase `pgvector` holding ANGRAU & ICAR PDF chunks
 - **Voice Processing:** Web Speech API / OpenAI Whisper (Speech-to-Text) & Web Speech API / Google TTS (Text-to-Speech)
 

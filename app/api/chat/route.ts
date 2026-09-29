@@ -1,4 +1,3 @@
-import { google } from "@ai-sdk/google"
 import {
   convertToModelMessages,
   stepCountIs,
@@ -7,6 +6,7 @@ import {
   type UIMessage,
 } from "ai"
 import { z } from "zod"
+import { chatModel, reasoningOptions } from "@/lib/ai"
 import { BANNED_PROMPT_LIST } from "@/lib/banned-pesticides"
 import { toCrop } from "@/lib/crops"
 import { searchKnowledge } from "@/lib/rag"
@@ -54,7 +54,7 @@ function prune(messages: UIMessage[]): UIMessage[] {
 
 function friendlyError(error: unknown): string {
   const text = String(error)
-  if (/429|quota|RESOURCE_EXHAUSTED|rate/i.test(text)) {
+  if (/429|529|quota|RESOURCE_EXHAUSTED|rate|overloaded/i.test(text)) {
     return "ప్రస్తుతం చాలా మంది వాడుతున్నారు. కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి."
   }
   return "క్షమించండి, సమస్య వచ్చింది. దయచేసి మళ్లీ ప్రయత్నించండి."
@@ -64,13 +64,13 @@ export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json()
 
   const result = streamText({
-    model: google("gemini-2.5-flash"),
+    model: chatModel(),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(prune(messages), { tools }),
     tools,
     stopWhen: stepCountIs(3),
     maxOutputTokens: 1500,
-    providerOptions: { google: { thinkingConfig: { thinkingBudget: 512 } } },
+    providerOptions: reasoningOptions(512),
   })
 
   return result.toUIMessageStreamResponse({ onError: friendlyError })

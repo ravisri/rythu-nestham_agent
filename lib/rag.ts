@@ -1,19 +1,12 @@
-import { google } from "@ai-sdk/google"
 import { embed, embedMany } from "ai"
+import { embedOptions as options, embeddingModel } from "@/lib/ai"
 import { redactBanned } from "@/lib/banned-pesticides"
 import type { Crop } from "@/lib/crops"
 import { getSupabase } from "@/lib/supabase"
 
-const model = google.textEmbeddingModel("gemini-embedding-001")
-
-// 768 must match vector(768) in supabase/migrations/0001_init_pgvector.sql
-const options = (taskType: "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT") => ({
-  google: { outputDimensionality: 768, taskType },
-})
-
 export async function embedQuery(text: string): Promise<number[]> {
   const { embedding } = await embed({
-    model,
+    model: embeddingModel(),
     value: text,
     providerOptions: options("RETRIEVAL_QUERY"),
   })
@@ -22,7 +15,7 @@ export async function embedQuery(text: string): Promise<number[]> {
 
 export async function embedDocuments(texts: string[]): Promise<number[][]> {
   const { embeddings } = await embedMany({
-    model,
+    model: embeddingModel(),
     values: texts,
     providerOptions: options("RETRIEVAL_DOCUMENT"),
   })
