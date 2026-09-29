@@ -1,14 +1,17 @@
 // Usage: npm run ingest                  (all files under data/pdfs/<crop>/*.pdf|txt|md)
 //        npm run ingest -- --crop paddy  (only paddy sections / folders)
 //        npm run ingest -- --force       (redo sections that are already stored)
-//        npm run ingest -- --ocr-only    (only fill the OCR cache, no embedding / DB writes)
+//        npm run ingest:ocr              (only fill the OCR cache, no embedding / DB writes)
 // Re-running continues where it stopped: stored sections are skipped, OCR pages come from data/ocr/.
 // Needs in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and the API key
 // for the OCR_MODEL / EMBEDDING_MODEL providers (default Google: GOOGLE_GENERATIVE_AI_API_KEY).
+// OCR (only when the PDF text layer is garbled): Google Vision if GOOGLE_VISION_API_KEY is
+// set (per-page price, cheapest), else LLM OCR via OCR_MODEL. Force with OCR_ENGINE=vision|llm.
 // Optional manifest "<pdf name>.json" next to a PDF:
 //   { "pages": "120-175" }  limits OCR to those PDF pages, or
 //   { "source", "state", "pageOffset", "sections": [{ crop, topic, title, pages | pdfPages, skip? }] }
 //   splits a multi-crop book; "pages" are printed page numbers (PDF page = printed + pageOffset).
+import { createHash } from "node:crypto"
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { APICallError, generateText, RetryError } from "ai"
@@ -16,6 +19,7 @@ import { PDFDocument } from "pdf-lib"
 import { extractText, getDocumentProxy } from "unpdf"
 import { ocrModel, reasoningOptions } from "@/lib/ai"
 import { CROPS, isCrop } from "@/lib/crops"
+import { visionEnabled, VisionError, visionOcr } from "@/lib/ocr"
 import { embedDocuments } from "@/lib/rag"
 import { getSupabase } from "@/lib/supabase"
 
@@ -81,7 +85,8 @@ async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
       // Bad model name / API key / request won't fix itself: fail now.
       const retryable =
         RetryError.isInstance(error) ||
-        (APICallError.isInstance(error) && error.isRetryable)
+        (APICallError.isInstance(error) && error.isRetryable) ||
+        (error instanceof VisionError && error.retryable)
       if (!retryable || attempt >= 5) throw error
       const reason = message.slice(0, 120)
       console.log(`  ${label} retry ${attempt}: ${reason}`)
@@ -168,8 +173,10 @@ class PdfReader {
     const pdf = await getDocumentProxy(bytes.slice())
     const { text, totalPages } = await extractText(pdf, { mergePages: false })
     const needsOcr = looksGarbled(text.join("\n"), totalPages)
-    if (needsOcr)
-      console.log(`  text extraction poor, using OCR (${ocrModel().modelId})`)
+    if (needsOcr) {
+      const engine = visionEnabled() ? "Google Vision" : ocrModel().modelId
+      console.log(`  text extraction poor, using OCR (${engine})`)
+    }
     return new PdfReader(file, bytes, text, needsOcr)
   }
 
@@ -204,10 +211,23 @@ class PdfReader {
     copied.forEach((page) => part.addPage(page))
     const data = await part.save()
 
-    const result = await withRetry("OCR", () =>
+    const text = visionEnabled()
+      ? await withRetry("OCR", () => visionOcr(data, pages.length))
+      : await llmOcr(data, range)
+    await mkdir(cacheDir, { recursive: true })
+    await writeFile(cacheFile, text, "utf8")
+    console.log(`    PDF pages ${range}: OCR done`)
+    if (!visionEnabled()) await sleep(4000)
+    return text
+  }
+}
+
+async function llmOcr(data: Uint8Array, range: string): Promise<string> {
+  const model = ocrModel()
+  const result = await withRetry("OCR", () =>
       generateText({
-        model: ocrModel(),
-        providerOptions: reasoningOptions(0),
+        model,
+        providerOptions: reasoningOptions(model.modelId, "none"),
         messages: [
           {
             role: "user",
@@ -224,15 +244,10 @@ class PdfReader {
         ],
       })
     )
-    if (result.finishReason === "length") {
-      console.log(`    PDF pages ${range}: WARNING output was cut off`)
-    }
-    await mkdir(cacheDir, { recursive: true })
-    await writeFile(cacheFile, result.text, "utf8")
-    console.log(`    PDF pages ${range}: OCR done`)
-    await sleep(4000)
-    return result.text
+  if (result.finishReason === "length") {
+    console.log(`    PDF pages ${range}: WARNING output was cut off`)
   }
+  return result.text
 }
 
 type Piece = { content: string; pages?: string }
@@ -244,6 +259,11 @@ async function store(
   state?: string
 ) {
   const supabase = getSupabase()
+  const hashes = pieces.map((p) => hashOf(p.content))
+  if (await isUnchanged(job, source, hashes)) {
+    console.log("    text unchanged, embedding skipped")
+    return
+  }
   const del = supabase
     .from("crop_knowledge")
     .delete()
@@ -261,6 +281,7 @@ async function store(
     const rows = batch.map(({ content, pages }, j) => ({
       content,
       metadata: {
+        hash: hashes[i + j],
         crop: job.crop,
         source,
         ...(job.topic && { topic: job.topic }),
@@ -274,6 +295,26 @@ async function store(
     if (error) throw error
     if (i + BATCH < pieces.length) await sleep(EMBED_PAUSE_MS)
   }
+}
+
+const hashOf = (text: string) =>
+  createHash("sha1").update(text).digest("hex").slice(0, 16)
+
+// With --force, re-embedding identical text only wastes embed quota.
+async function isUnchanged(job: Job, source: string, hashes: string[]) {
+  const query = getSupabase()
+    .from("crop_knowledge")
+    .select("hash:metadata->>hash")
+    .eq("metadata->>source", source)
+  const { data, error } = job.section
+    ? await query.eq("metadata->>section", job.section)
+    : await query
+  if (error) throw error
+  const stored = (data as { hash: string | null }[]).map((r) => r.hash).sort()
+  const fresh = [...hashes].sort()
+  return (
+    stored.length === fresh.length && stored.every((h, i) => h === fresh[i])
+  )
 }
 
 async function isStored(job: Job, source: string): Promise<boolean> {

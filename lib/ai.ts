@@ -57,11 +57,11 @@ function languageModel(id: string) {
 }
 
 export const chatModel = () =>
-  languageModel(process.env.CHAT_MODEL || "google:gemini-2.5-flash")
+  languageModel(process.env.CHAT_MODEL || "google:gemini-3.5-flash-lite")
 
 // OCR needs PDF input: google, anthropic and openai support it.
 export const ocrModel = () =>
-  languageModel(process.env.OCR_MODEL || "google:gemini-2.5-flash")
+  languageModel(process.env.OCR_MODEL || "google:gemini-3.5-flash-lite")
 
 // Changing this needs a full re-ingest: stored vectors only match the model that made them.
 export function embeddingModel() {
@@ -86,8 +86,16 @@ export const embedOptions = (
   compat: { dimensions: EMBED_DIMS },
 })
 
-// Keep reasoning cheap on every provider (0 = off where supported).
-export const reasoningOptions = (budget: number) => ({
-  google: { thinkingConfig: { thinkingBudget: budget } },
-  openai: { reasoningEffort: budget === 0 ? "minimal" : "low" },
-})
+// Keep reasoning cheap on every provider. Gemini 2.x takes a token budget;
+// Gemini 3.x+ rejects thinkingBudget 0 and takes a thinkingLevel instead.
+export function reasoningOptions(modelId: string, effort: "none" | "low") {
+  const none = effort === "none"
+  return {
+    google: {
+      thinkingConfig: /^gemini-2\./.test(modelId)
+        ? { thinkingBudget: none ? 0 : 512 }
+        : { thinkingLevel: none ? "minimal" : "low" },
+    },
+    openai: { reasoningEffort: none ? "minimal" : "low" },
+  }
+}
