@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
@@ -12,8 +12,7 @@ import {
   ShieldIcon,
   SproutIcon,
   SunIcon,
-  Volume2Icon,
-  VolumeXIcon,
+  Trash2Icon,
   XIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -44,10 +43,20 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis"
-import { loadChat, saveChat } from "@/lib/chat-history"
+import { clearChat, loadChat, saveChat } from "@/lib/chat-history"
 import { compressImage } from "@/lib/image"
 import { MESSAGES, type Usage } from "@/lib/plans"
 import { HelpDialog } from "./help-dialog"
@@ -127,11 +136,13 @@ function ChatInner({
   initialMessages,
 }: ChatProps & { initialMessages: UIMessage[] }) {
   const router = useRouter()
-  const { messages, sendMessage, status, error, stop } = useChat({
+  const { messages, sendMessage, setMessages, status, error, stop } = useChat({
     transport,
     messages: initialMessages,
   })
   const [left, setLeft] = useState(usage.left)
+  // Messages that came from storage (their credit counts are stale).
+  const [loadedCount, setLoadedCount] = useState(initialMessages.length)
   const controller = usePromptInputController()
   const attachments = usePromptInputAttachments()
   const {
@@ -141,16 +152,13 @@ function ChatInner({
     stop: stopSpeech,
   } = useSpeechSynthesis()
   const { setTheme, resolvedTheme } = useTheme()
-  const [autoSpeak, setAutoSpeak] = useState(true)
   const [largeText, setLargeText] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const previousStatus = useRef(status)
 
   const busy = status === "submitted" || status === "streaming"
 
   useEffect(() => {
     try {
-      setAutoSpeak(localStorage.getItem("autoSpeak") !== "off")
       setLargeText(localStorage.getItem("textSize") === "large")
     } catch {}
   }, [])
@@ -165,13 +173,13 @@ function ChatInner({
     const last = messages[messages.length - 1]
     const meta = last?.metadata as ReplyMeta | undefined
     if (
-      messages.length > initialMessages.length &&
+      messages.length > loadedCount &&
       last.role === "assistant" &&
       typeof meta?.left === "number"
     ) {
       setLeft(meta.left)
     }
-  }, [messages, initialMessages.length])
+  }, [messages, loadedCount])
 
   // Limit reached -> 0 left; signed in on another phone -> back to login.
   useEffect(() => {
@@ -186,15 +194,6 @@ function ChatInner({
       return () => clearTimeout(timer)
     }
   }, [error, router])
-
-  useEffect(() => {
-    const finished = previousStatus.current !== "ready" && status === "ready"
-    previousStatus.current = status
-    if (!finished || !autoSpeak || !canSpeak) return
-    const last = messages[messages.length - 1]
-    const text = last?.role === "assistant" ? textOf(last) : ""
-    if (text) speak(last.id, text)
-  }, [status, messages, autoSpeak, canSpeak, speak])
 
   async function send(text: string, files: FileInput[] = []) {
     if (busy || (!text.trim() && files.length === 0)) return
@@ -233,11 +232,13 @@ function ChatInner({
     } catch {}
   }
 
-  function toggleAutoSpeak() {
-    const next = !autoSpeak
-    setAutoSpeak(next)
-    if (!next) stopSpeech()
-    remember("autoSpeak", next ? "on" : "off")
+  // Deletes this user's chat from the browser and shows the welcome screen.
+  function clearHistory() {
+    stopSpeech()
+    setNotice(null)
+    setMessages([])
+    setLoadedCount(0)
+    clearChat(userId)
   }
 
   function toggleTextSize() {
@@ -295,6 +296,46 @@ function ChatInner({
               </Link>
             </Button>
           )}
+          {messages.length > 0 && (
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-10 rounded-xl"
+                  aria-label="చాట్ తొలగించు"
+                  disabled={busy}
+                >
+                  <Trash2Icon />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>చాట్ మొత్తం తొలగించాలా?</DialogTitle>
+                  <DialogDescription className="text-base">
+                    ఈ ఫోన్‌లో ఉన్న ప్రశ్నలు, సమాధానాలు అన్నీ తొలగిపోతాయి.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="gap-2">
+                  <DialogClose asChild>
+                    <Button variant="outline" className="h-11 text-base">
+                      వద్దు
+                    </Button>
+                  </DialogClose>
+                  <DialogClose asChild>
+                    <Button
+                      variant="destructive"
+                      className="h-11 text-base"
+                      onClick={clearHistory}
+                    >
+                      <Trash2Icon />
+                      తొలగించు
+                    </Button>
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
           <HelpDialog />
           <Button
             variant="outline"
@@ -318,17 +359,6 @@ function ChatInner({
             <SunIcon className="hidden dark:block" />
             <MoonIcon className="dark:hidden" />
           </Button>
-          {canSpeak && (
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-10 rounded-xl"
-              aria-label={autoSpeak ? "వాయిస్ ఆఫ్" : "వాయిస్ ఆన్"}
-              onClick={toggleAutoSpeak}
-            >
-              {autoSpeak ? <Volume2Icon /> : <VolumeXIcon />}
-            </Button>
-          )}
         </div>
       </header>
 

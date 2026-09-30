@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "ingest": "tsx --env-file=.env.local scripts/ingest-pdf.ts",
     "ingest:ocr": "tsx --env-file=.env.local scripts/ingest-pdf.ts --ocr-only",
-    "create-admin": "tsx --env-file=.env.local scripts/create-admin.ts"
+    "create-admin": "tsx --env-file=.env.local scripts/create-admin.ts",
+    "ingest:crop": "npm run ingest -- --crop"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.68",

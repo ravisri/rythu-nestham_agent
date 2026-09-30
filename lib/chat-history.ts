@@ -12,6 +12,12 @@ export function loadChat(userId: string): UIMessage[] {
   }
 }
 
+export function clearChat(userId: string) {
+  try {
+    localStorage.removeItem(key(userId))
+  } catch {}
+}
+
 // Photos are large: keep them only in the newest messages.
 function trim(messages: UIMessage[], max: number, keepImages: number) {
   const recent = messages.slice(-max)
