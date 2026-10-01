@@ -32,7 +32,9 @@ import {
 import { FieldGroup } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { LanguageToggle } from "@/components/language-toggle"
 import { getDeviceId } from "@/lib/device"
+import { useI18n } from "@/lib/i18n/client"
 import {
   forgotSchema,
   loginSchema,
@@ -51,10 +53,11 @@ function useGoHome() {
 }
 
 function FormAlert({ message }: { message: string | null }) {
+  const { tr } = useI18n()
   if (!message) return null
   return (
     <Alert variant="destructive">
-      <AlertDescription className="text-base">{message}</AlertDescription>
+      <AlertDescription className="text-base">{tr(message)}</AlertDescription>
     </Alert>
   )
 }
@@ -75,6 +78,7 @@ function SubmitButton({
 }
 
 function LoginForm() {
+  const { t } = useI18n()
   const goHome = useGoHome()
   const [error, setError] = useState<string | null>(null)
   const form = useForm({
@@ -95,20 +99,20 @@ function LoginForm() {
         <FormInput
           control={form.control}
           name="identifier"
-          label="యూజర్‌నేమ్ లేదా ఫోన్ నంబర్"
+          label={t.auth.identifier}
           autoComplete="username"
           autoCapitalize="none"
         />
         <FormInput
           control={form.control}
           name="password"
-          label="పాస్‌వర్డ్"
+          label={t.common.password}
           type="password"
           autoComplete="current-password"
         />
         <FormAlert message={error} />
         <SubmitButton pending={form.formState.isSubmitting}>
-          లాగిన్
+          {t.auth.login}
         </SubmitButton>
       </FieldGroup>
     </form>
@@ -116,6 +120,7 @@ function LoginForm() {
 }
 
 function SignupForm() {
+  const { t } = useI18n()
   const goHome = useGoHome()
   const [error, setError] = useState<string | null>(null)
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null)
@@ -138,15 +143,15 @@ function SignupForm() {
           <FormInput
             control={form.control}
             name="username"
-            label="యూజర్‌నేమ్"
-            description="ఉదా: ramesh_123 (ఆంగ్ల అక్షరాలు, అంకెలు)"
+            label={t.common.username}
+            description={t.auth.usernameHint}
             autoComplete="username"
             autoCapitalize="none"
           />
           <FormInput
             control={form.control}
             name="phone"
-            label="ఫోన్ నంబర్ (ఐచ్ఛికం)"
+            label={t.auth.phoneOptional}
             type="tel"
             inputMode="numeric"
             autoComplete="tel"
@@ -154,21 +159,21 @@ function SignupForm() {
           <FormInput
             control={form.control}
             name="password"
-            label="పాస్‌వర్డ్"
-            description="కనీసం 6 అక్షరాలు లేదా అంకెలు"
+            label={t.common.password}
+            description={t.auth.passwordHint}
             type="password"
             autoComplete="new-password"
           />
           <FormInput
             control={form.control}
             name="confirm"
-            label="పాస్‌వర్డ్ మళ్లీ ఇవ్వండి"
+            label={t.auth.confirmPassword}
             type="password"
             autoComplete="new-password"
           />
           <FormAlert message={error} />
           <SubmitButton pending={form.formState.isSubmitting}>
-            ఖాతా తెరవండి
+            {t.common.createAccount}
           </SubmitButton>
         </FieldGroup>
       </form>
@@ -176,10 +181,9 @@ function SignupForm() {
       <Dialog open={recoveryCode !== null} onOpenChange={() => {}}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>మీ రికవరీ కోడ్</DialogTitle>
+            <DialogTitle>{t.auth.yourCode}</DialogTitle>
             <DialogDescription className="text-base">
-              ఈ కోడ్ రాసి పెట్టుకోండి. కొత్త ఫోన్‌లో పాస్‌వర్డ్ మర్చిపోతే ఇది
-              అవసరం.
+              {t.auth.codeHint}
             </DialogDescription>
           </DialogHeader>
           <p className="py-2 text-center font-mono text-4xl font-bold tracking-[0.3em]">
@@ -187,7 +191,7 @@ function SignupForm() {
           </p>
           <DialogFooter>
             <Button className="h-12 w-full text-base" onClick={goHome}>
-              రాసుకున్నాను, కొనసాగించండి
+              {t.auth.codeSaved}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -197,6 +201,7 @@ function SignupForm() {
 }
 
 function ForgotForm() {
+  const { t } = useI18n()
   const [account, setAccount] = useState<{
     identifier: string
     trusted: boolean
@@ -224,13 +229,13 @@ function ForgotForm() {
         <FormInput
           control={form.control}
           name="identifier"
-          label="యూజర్‌నేమ్ లేదా ఫోన్ నంబర్"
+          label={t.auth.identifier}
           autoComplete="username"
           autoCapitalize="none"
         />
         <FormAlert message={error} />
         <SubmitButton pending={form.formState.isSubmitting}>
-          కొనసాగించండి
+          {t.auth.continue}
         </SubmitButton>
       </FieldGroup>
     </form>
@@ -246,6 +251,7 @@ function NewPasswordForm({
   trusted: boolean
   onBack: () => void
 }) {
+  const { t } = useI18n()
   const goHome = useGoHome()
   const [error, setError] = useState<string | null>(null)
   const form = useForm({
@@ -256,7 +262,7 @@ function NewPasswordForm({
   const onSubmit = form.handleSubmit(async (values) => {
     setError(null)
     if (!trusted && values.recoveryCode === "") {
-      form.setError("recoveryCode", { message: "6 అంకెల రికవరీ కోడ్ ఇవ్వండి" })
+      form.setError("recoveryCode", { message: "6 అంకెల రికవరీ కోడ్ ఇవ్వండి" }) // translated by FormInput
       return
     }
     const result = await resetPassword(values, getDeviceId())
@@ -268,14 +274,14 @@ function NewPasswordForm({
     <form onSubmit={onSubmit} noValidate>
       <FieldGroup>
         <p className="text-base">
-          ఖాతా: <span className="font-semibold">{identifier}</span>
+          {t.auth.account} <span className="font-semibold">{identifier}</span>
         </p>
         {!trusted && (
           <FormInput
             control={form.control}
             name="recoveryCode"
-            label="రికవరీ కోడ్"
-            description="ఖాతా తెరిచినప్పుడు ఇచ్చిన 6 అంకెల కోడ్"
+            label={t.common.recoveryCode}
+            description={t.auth.codeDescription}
             inputMode="numeric"
             autoComplete="one-time-code"
             maxLength={6}
@@ -284,20 +290,20 @@ function NewPasswordForm({
         <FormInput
           control={form.control}
           name="password"
-          label="కొత్త పాస్‌వర్డ్"
+          label={t.common.newPassword}
           type="password"
           autoComplete="new-password"
         />
         <FormInput
           control={form.control}
           name="confirm"
-          label="కొత్త పాస్‌వర్డ్ మళ్లీ ఇవ్వండి"
+          label={t.auth.confirmNewPassword}
           type="password"
           autoComplete="new-password"
         />
         <FormAlert message={error} />
         <SubmitButton pending={form.formState.isSubmitting}>
-          పాస్‌వర్డ్ మార్చండి
+          {t.auth.changePassword}
         </SubmitButton>
         <Button
           type="button"
@@ -305,7 +311,7 @@ function NewPasswordForm({
           className="h-11 text-base"
           onClick={onBack}
         >
-          వెనక్కి
+          {t.common.back}
         </Button>
       </FieldGroup>
     </form>
@@ -313,18 +319,20 @@ function NewPasswordForm({
 }
 
 export function AuthForm() {
+  const { t } = useI18n()
   const [tab, setTab] = useState<Tab>("login")
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 bg-muted p-4 dark:bg-background">
+    <main className="relative mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 bg-muted p-4 dark:bg-background">
+      <LanguageToggle className="absolute top-4 right-4 h-10" />
       <div className="flex items-center justify-center gap-3">
         <span className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <SproutIcon className="size-7" />
         </span>
         <div>
-          <h1 className="text-2xl font-semibold">రైతు నేస్తం</h1>
+          <h1 className="text-2xl font-semibold">{t.common.appName}</h1>
           <p className="text-sm text-muted-foreground">
-            పంట సమస్యకు సులభ పరిష్కారం
+            {t.auth.tagline}
           </p>
         </div>
       </div>
@@ -333,30 +341,30 @@ export function AuthForm() {
         <CardHeader>
           <CardTitle className="text-xl">
             {tab === "signup"
-              ? "కొత్త ఖాతా"
+              ? t.auth.signup
               : tab === "forgot"
-                ? "పాస్‌వర్డ్ మర్చిపోయారా?"
-                : "లాగిన్"}
+                ? t.auth.forgot
+                : t.auth.login}
           </CardTitle>
           <CardDescription className="text-base">
             {tab === "signup"
-              ? "ఉచిత ట్రయల్‌తో మొదలుపెట్టండి."
+              ? t.auth.signupHint
               : tab === "forgot"
-                ? "మీ యూజర్‌నేమ్ లేదా ఫోన్ నంబర్ ఇవ్వండి."
-                : "మీ యూజర్‌నేమ్ లేదా ఫోన్ నంబర్‌తో లాగిన్ అవ్వండి."}
+                ? t.auth.forgotHint
+                : t.auth.loginHint}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
             <TabsList className="mb-4 grid h-11 w-full grid-cols-3">
               <TabsTrigger value="login" className="text-base">
-                లాగిన్
+                {t.auth.login}
               </TabsTrigger>
               <TabsTrigger value="signup" className="text-base">
-                కొత్త ఖాతా
+                {t.auth.signup}
               </TabsTrigger>
               <TabsTrigger value="forgot" className="text-base">
-                మర్చిపోయా
+                {t.auth.forgotTab}
               </TabsTrigger>
             </TabsList>
             <TabsContent value="login">

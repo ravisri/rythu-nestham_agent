@@ -37,3 +37,4 @@ next-env.d.ts
 
 # OCR cache from npm run ingest
 /data/ocr/
+!.env.example

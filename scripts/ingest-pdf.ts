@@ -198,7 +198,7 @@ class PdfReader {
     const { text, totalPages } = await extractText(pdf, { mergePages: false })
     const needsOcr = looksGarbled(text.join("\n"), totalPages)
     if (needsOcr) {
-      const engine = visionEnabled() ? "Google Vision" : ocrModel().modelId
+      const engine = visionEnabled() ? "Google Vision" : (await ocrModel()).modelId
       console.log(`  text extraction poor, using OCR (${engine})`)
     }
     return new PdfReader(file, bytes, text, needsOcr)
@@ -261,7 +261,7 @@ async function llmOcr(
   label: string,
   mediaType = "application/pdf"
 ): Promise<string> {
-  const model = ocrModel()
+  const model = await ocrModel()
   const result = await withRetry("OCR", () =>
     generateText({
       model,
@@ -341,7 +341,7 @@ async function translate(segment: string): Promise<string> {
   const cached = await readFile(cacheFile, "utf8").catch(() => undefined)
   if (cached !== undefined && teluguShare(cached) >= 0.5) return cached
 
-  const model = translateModel()
+  const model = await translateModel()
   const run = (system: string) =>
     withRetry("translate", () =>
       generateText({

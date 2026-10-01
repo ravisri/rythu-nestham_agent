@@ -4,6 +4,8 @@ import { Geist_Mono, Noto_Sans_Telugu } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { I18nProvider } from "@/lib/i18n/client"
+import { getLocale } from "@/lib/i18n/server"
 import { cn } from "@/lib/utils"
 
 // Applied via className on the body element (not the --font-sans token) so switching
@@ -33,20 +35,23 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const locale = await getLocale()
   return (
     <html
-      lang="te"
+      lang={locale}
       suppressHydrationWarning
       className={cn("antialiased", fontMono.variable)}
     >
       <body className={fontTelugu.className}>
         <ThemeProvider>
-          <TooltipProvider>{children}</TooltipProvider>
+          <I18nProvider locale={locale}>
+            <TooltipProvider>{children}</TooltipProvider>
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

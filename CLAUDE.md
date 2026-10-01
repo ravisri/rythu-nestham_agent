@@ -35,6 +35,9 @@ An AI Agent application empowering farmers in Telangana & Andhra Pradesh. The ap
 - `lib/rag.ts` — embedding + `match_crop_knowledge` search (banned-pesticide sentences redacted via `lib/banned-pesticides.ts`)
 - `components/chat/` — Telugu chat UI (AI Elements + shadcn); `hooks/` — Web Speech STT/TTS (`te-IN`)
 - Accounts (custom, no Supabase Auth/OTP): `lib/auth.ts` (scrypt passwords, one-session-per-user httpOnly cookie), `app/login/` (login/sign-up/forgot Server Actions + UI), `app/admin/` (admin: create users, plans, password reset). Tables in `supabase/migrations/0003_accounts.sql` (RLS on, service-role only). Create/promote an admin: `npm run create-admin <username> <password> [phone]`
+- Admin AI settings (`/admin/ai`): chat/OCR model + API keys per provider, stored AES-GCM encrypted (`lib/secrets.ts`) in `ai_settings` (`supabase/migrations/0004_ai_settings.sql`), loaded with a 30s cache by `lib/ai-settings.ts`. Order: admin setting → `.env.local` → default. Model lists in `lib/ai-models.ts`. Model getters in `lib/ai.ts` are async (`await chatModel()`).
+- `app/profile/` — user's own account, plan & usage. Home header avatar (`components/chat/profile-menu.tsx`): farmers → `/profile`; admins get a menu (profile, `/admin`, `/admin/ai`)
+- UI language (te/en, `lang` cookie): static text only, in `lib/i18n/dictionaries.ts` (`te` is the source, `en` must match). Server: `getDictionary()`; client: `useI18n()` → `t`, `tr()` (translates Telugu error strings). AI answers, chat-route replies, example questions and voice stay Telugu. New UI text goes into both dictionaries.
 - Plans & credits: `lib/plans.ts` (limits, IST days, Telugu messages), `lib/usage.ts` (`use_credits`/`add_usage` RPCs, charged in `app/api/chat/route.ts`). Chats are never stored server-side: `lib/chat-history.ts` (localStorage)
 - Forms: react-hook-form + zod; shared schemas in `lib/validation.ts` are re-checked in every Server Action
 

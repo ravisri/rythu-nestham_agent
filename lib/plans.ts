@@ -2,9 +2,10 @@
 // 1 text question = 1 credit (~3k tokens), 1 photo question = 2 credits.
 
 export const PLANS = {
-  trial: { label: "ఉచిత ట్రయల్", daily: 5, period: 50, perMonth: false },
-  pro: { label: "ప్రో", daily: 20, period: 400, perMonth: true },
-  pro_plus: { label: "ప్రో ప్లస్", daily: 80, period: 1500, perMonth: true },
+  // Labels: lib/i18n/dictionaries.ts (plans.*)
+  trial: { daily: 5, period: 50, perMonth: false },
+  pro: { daily: 20, period: 400, perMonth: true },
+  pro_plus: { daily: 80, period: 1500, perMonth: true },
 } as const
 
 export type Plan = keyof typeof PLANS
@@ -17,7 +18,21 @@ export type PlanUser = {
 
 export type PlanStatus = "active" | "trial_over" | "expired"
 
-export type Usage = { planLabel: string; left: number; status: PlanStatus }
+export type Usage = { plan: Plan; left: number; status: PlanStatus }
+
+// shadcn Badge variant per status. Labels: lib/i18n/dictionaries.ts (status.*)
+export const PLAN_STATUS = {
+  active: "secondary",
+  trial_over: "destructive",
+  expired: "destructive",
+} as const
+
+// ISO timestamp -> "1 అక్టోబర్, 2026" / "1 October 2026" (IST)
+export const formatIstDate = (iso: string, locale: "te" | "en" = "te") =>
+  new Date(iso).toLocaleDateString(`${locale}-IN`, {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "long",
+  })
 
 export const creditCost = (hasImage: boolean) => (hasImage ? 2 : 1)
 

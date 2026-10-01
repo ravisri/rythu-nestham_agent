@@ -10,6 +10,7 @@ export default async function Page() {
   return (
     <Chat
       userId={user.id}
+      username={user.username}
       isAdmin={user.role === "admin"}
       usage={await usageSummary(user)}
     />

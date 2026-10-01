@@ -3,6 +3,7 @@
 import { MicIcon, SquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { useI18n } from "@/lib/i18n/client"
 
 export function ListeningCard({
   transcript,
@@ -11,6 +12,7 @@ export function ListeningCard({
   transcript: string
   onStop: () => void
 }) {
+  const { t } = useI18n()
   return (
     <Card className="border-primary/40 bg-primary/5">
       <CardContent className="flex items-center gap-4">
@@ -21,7 +23,7 @@ export function ListeningCard({
           </span>
         </span>
         <p className="min-w-0 flex-1 text-base leading-snug">
-          {transcript || "చెప్పండి, వింటున్నాను…"}
+          {transcript || t.chat.listening}
         </p>
         <Button
           variant="destructive"
@@ -29,7 +31,7 @@ export function ListeningCard({
           onClick={onStop}
         >
           <SquareIcon className="size-4" />
-          ఆపండి
+          {t.chat.stop}
         </Button>
       </CardContent>
     </Card>

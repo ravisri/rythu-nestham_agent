@@ -73,5 +73,5 @@ export async function usageSummary(user: AppUser): Promise<Usage> {
     status === "active"
       ? Math.max(0, Math.min(plan.daily - used.today, plan.period - used.period))
       : 0
-  return { planLabel: plan.label, left, status }
+  return { plan: user.plan, left, status }
 }

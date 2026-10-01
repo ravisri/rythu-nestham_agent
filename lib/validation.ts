@@ -1,5 +1,6 @@
 // Shared by the forms (react-hook-form) and re-checked in every Server Action.
 import { z } from "zod"
+import { AI_PROVIDERS } from "@/lib/ai-models"
 
 // "+91 98765 43210" / "919876543210" -> "9876543210"
 export function normalizePhone(value: string): string {
@@ -93,6 +94,53 @@ export const adminPlanSchema = z.object({
 
 export const adminPasswordSchema = z.object({ userId: z.uuid(), password })
 
+export const adminUserIdSchema = z.object({ userId: z.uuid() })
+
+const aiProvider = z.enum(AI_PROVIDERS)
+const modelName = z
+  .string()
+  .trim()
+  .regex(/^[\w.\-/:@]{1,100}$/, "సరైన మోడల్ పేరు ఇవ్వండి")
+const apiKey = z
+  .string()
+  .trim()
+  .max(300, "కీ చాలా పొడవుగా ఉంది")
+  .refine((v) => !/\s/.test(v), "కీలో ఖాళీలు ఉండకూడదు")
+const baseUrl = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || z.url().safeParse(v).success, "సరైన URL ఇవ్వండి")
+
+// API keys: "" = keep the saved key; providers in clearKeys lose their saved key.
+export const aiSettingsSchema = z
+  .object({
+    chatProvider: aiProvider,
+    chatModel: modelName,
+    ocrProvider: aiProvider,
+    ocrModel: modelName,
+    compatBaseUrl: baseUrl,
+    apiKeys: z.object({
+      google: apiKey,
+      openai: apiKey,
+      anthropic: apiKey,
+      compat: apiKey,
+    }),
+    clearKeys: z.array(aiProvider),
+  })
+  .refine(
+    (d) =>
+      d.compatBaseUrl !== "" ||
+      (d.chatProvider !== "compat" && d.ocrProvider !== "compat"),
+    { path: ["compatBaseUrl"], message: "compat కోసం Base URL ఇవ్వండి" }
+  )
+
+export const aiTestSchema = z.object({
+  provider: aiProvider,
+  model: modelName,
+  apiKey,
+  compatBaseUrl: baseUrl,
+})
+
 export type LoginValues = z.input<typeof loginSchema>
 export type SignupValues = z.input<typeof signupSchema>
 export type ForgotValues = z.input<typeof forgotSchema>
@@ -100,3 +148,6 @@ export type ResetValues = z.input<typeof resetSchema>
 export type AdminCreateValues = z.input<typeof adminCreateSchema>
 export type AdminPlanValues = z.input<typeof adminPlanSchema>
 export type AdminPasswordValues = z.input<typeof adminPasswordSchema>
+export type AdminUserIdValues = z.input<typeof adminUserIdSchema>
+export type AiSettingsValues = z.input<typeof aiSettingsSchema>
+export type AiTestValues = z.input<typeof aiTestSchema>

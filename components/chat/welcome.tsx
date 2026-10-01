@@ -11,32 +11,25 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useI18n } from "@/lib/i18n/client"
 
-const STEPS = [
-  "ప్రశ్న చెప్పండి లేదా ఫోటో పంపండి",
-  "ANGRAU / ICAR సమాచారంతో AI పరిశీలిస్తుంది",
-  "తెలుగులో సలహా చదవండి, వినండి",
-]
-
-const EXAMPLES: { icon: LucideIcon; label: string; text: string }[] = [
+// text = the question sent to the AI: always Telugu (RAG data is Telugu).
+// The button label comes from t.welcome.exampleLabels (same order).
+const EXAMPLES: { icon: LucideIcon; text: string }[] = [
   {
     icon: WheatIcon,
-    label: "వరి ఆకులపై మచ్చలు",
     text: "వరి ఆకులపై గోధుమ రంగు మచ్చలు వచ్చాయి. ఏం చేయాలి?",
   },
   {
     icon: BugIcon,
-    label: "పత్తిలో పురుగులు",
     text: "పత్తి పంటలో రసం పీల్చే పురుగులు ఆశిస్తున్నాయి. తక్కువ ఖర్చుతో నివారణ ఏమిటి?",
   },
   {
     icon: LeafIcon,
-    label: "మిర్చి ఆకు ముడత",
     text: "మిర్చి ఆకులు ముడుచుకుపోతున్నాయి. కారణం, పరిష్కారం ఏమిటి?",
   },
   {
     icon: DropletsIcon,
-    label: "సేంద్రీయ మందు తయారీ",
     text: "తక్కువ ఖర్చుతో వేప నూనె ద్రావణం ఎలా తయారు చేసి పిచికారీ చేయాలి?",
   },
 ]
@@ -52,17 +45,18 @@ export function Welcome({
   onCamera: () => void
   onPick: (text: string) => void
 }) {
+  const { t } = useI18n()
   return (
-    <div className="flex flex-col gap-6 py-2 w-full">
+    <div className="flex flex-col gap-6 py-2 w-full max-w-5xl">
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
           <SproutIcon className="size-9" />
         </span>
-        <h2 className="text-2xl font-semibold">నమస్కారం రైతన్నా!</h2>
+        <h2 className="text-2xl font-semibold">{t.welcome.hello}</h2>
         <p className="text-muted-foreground">
-          మీ పంట సమస్య ఏమిటి? చెప్పండి లేదా ఫోటో పంపండి.
+          {t.welcome.ask}
           <br />
-          సులభమైన, తక్కువ ఖర్చు పరిష్కారం ఇస్తాను.
+          {t.welcome.promise}
         </p>
       </div>
 
@@ -73,7 +67,7 @@ export function Welcome({
             onClick={onMic}
           >
             <MicIcon className="size-8" />
-            మాట్లాడండి
+            {t.chat.speak}
           </Button>
         )}
         <Button
@@ -82,12 +76,12 @@ export function Welcome({
           onClick={onCamera}
         >
           <CameraIcon className="size-8" />
-          ఫోటో పంపండి
+          {t.welcome.sendPhoto}
         </Button>
       </div>
 
       <ol className="space-y-2">
-        {STEPS.map((step, i) => (
+        {t.welcome.steps.map((step, i) => (
           <li key={step} className="flex items-center gap-3">
             <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
               {i + 1}
@@ -99,12 +93,12 @@ export function Welcome({
 
       <div className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">
-          ఉదాహరణలు — నొక్కండి:
+          {t.welcome.examples}
         </p>
         <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
-          {EXAMPLES.map(({ icon: Icon, label, text }) => (
+          {EXAMPLES.map(({ icon: Icon, text }, i) => (
             <Button
-              key={label}
+              key={text}
               variant="outline"
               className="h-auto min-h-14 justify-start gap-3 rounded-xl p-1.5 sm:p-3 text-left text-base whitespace-normal"
               onClick={() => onPick(text)}
@@ -112,7 +106,7 @@ export function Welcome({
               <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Icon className="size-5" />
               </span>
-              {label}
+              {t.welcome.exampleLabels[i]}
             </Button>
           ))}
         </div>

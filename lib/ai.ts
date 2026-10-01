@@ -1,27 +1,42 @@
-import { anthropic } from "@ai-sdk/anthropic"
-import { google } from "@ai-sdk/google"
-import { openai } from "@ai-sdk/openai"
+import { createAnthropic } from "@ai-sdk/anthropic"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
+import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { generateText } from "ai"
+import {
+  AI_PROVIDERS,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_EMBEDDING_MODEL,
+  type AiProvider,
+} from "@/lib/ai-models"
+import { getAiSettings, type AiSettings } from "@/lib/ai-settings"
 
-// Switch models from .env.local with "provider:model", e.g.
-//   CHAT_MODEL=anthropic:claude-haiku-4-5   CHAT_MODEL=openai:gpt-5-mini
-//   CHAT_MODEL=compat:llama-3.3-70b-versatile + COMPAT_BASE_URL/COMPAT_API_KEY
-// "compat" is any OpenAI-compatible API (Groq, OpenRouter, DeepSeek, Ollama...).
-// See .env.example.
+// Models are "provider:model", e.g. anthropic:claude-haiku-4-5, openai:gpt-5-mini,
+// compat:llama-3.3-70b-versatile (+ base URL). "compat" is any OpenAI-compatible
+// API (Groq, OpenRouter, DeepSeek, Ollama...).
+// Resolution order: admin page (/admin/ai, lib/ai-settings.ts) -> .env.local
+// (CHAT_MODEL, OCR_MODEL, *_API_KEY, COMPAT_*) -> default. See .env.example.
 
-const providers = {
-  google,
-  openai,
-  anthropic,
-  compat: () =>
-    createOpenAICompatible({
-      name: "compat",
-      baseURL: required("COMPAT_BASE_URL"),
-      apiKey: process.env.COMPAT_API_KEY,
-    }),
+type ProviderConfig = Pick<AiSettings, "apiKeys" | "compatBaseUrl">
+
+// An undefined apiKey makes each SDK read its usual env var.
+function provider(name: AiProvider, config: ProviderConfig) {
+  const apiKey = config.apiKeys[name]
+  switch (name) {
+    case "google":
+      return createGoogleGenerativeAI({ apiKey })
+    case "openai":
+      return createOpenAI({ apiKey })
+    case "anthropic":
+      return createAnthropic({ apiKey })
+    case "compat":
+      return createOpenAICompatible({
+        name: "compat",
+        baseURL: config.compatBaseUrl || required("COMPAT_BASE_URL"),
+        apiKey: apiKey ?? process.env.COMPAT_API_KEY,
+      })
+  }
 }
-
-type ProviderName = keyof typeof providers
 
 function required(name: string): string {
   const value = process.env[name]
@@ -30,7 +45,7 @@ function required(name: string): string {
 }
 
 // Bare model names: provider inferred from the official model id prefix.
-function inferProvider(model: string): ProviderName {
+function inferProvider(model: string): AiProvider {
   if (/^claude-/.test(model)) return "anthropic"
   if (/^(gpt-|o\d|text-embedding-)/.test(model)) return "openai"
   if (/^gemini-/.test(model)) return "google"
@@ -40,42 +55,66 @@ function inferProvider(model: string): ProviderName {
 }
 
 // "anthropic:claude-haiku-4-5" -> ["anthropic", "claude-haiku-4-5"]
-function parse(id: string): [ProviderName, string] {
+function parse(id: string): [AiProvider, string] {
   const i = id.indexOf(":")
-  const name = (i < 0 ? inferProvider(id) : id.slice(0, i)) as ProviderName
-  if (!(name in providers)) {
+  const name = (i < 0 ? inferProvider(id) : id.slice(0, i)) as AiProvider
+  if (!AI_PROVIDERS.includes(name)) {
     throw new Error(
-      `Unknown provider "${name}" in "${id}". Use: ${Object.keys(providers).join(", ")}`
+      `Unknown provider "${name}" in "${id}". Use: ${AI_PROVIDERS.join(", ")}`
     )
   }
   return [name, i < 0 ? id : id.slice(i + 1)]
 }
 
-function languageModel(id: string) {
+function languageModel(id: string, config: ProviderConfig) {
   const [name, model] = parse(id)
-  return name === "compat" ? providers.compat()(model) : providers[name](model)
+  return provider(name, config).languageModel(model)
 }
 
-export const chatModel = () =>
-  languageModel(process.env.CHAT_MODEL || "google:gemini-3.5-flash-lite")
+// Effective model ids (admin setting -> env -> default).
+export function modelIds(settings: AiSettings) {
+  return {
+    chat: settings.chatModel || process.env.CHAT_MODEL || DEFAULT_CHAT_MODEL,
+    ocr: settings.ocrModel || process.env.OCR_MODEL || DEFAULT_CHAT_MODEL,
+    translate: process.env.TRANSLATE_MODEL || settings.ocrModel || DEFAULT_CHAT_MODEL,
+    embedding: process.env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL,
+  }
+}
+
+export async function chatModel() {
+  const settings = await getAiSettings()
+  return languageModel(modelIds(settings).chat, settings)
+}
 
 // OCR needs PDF input: google, anthropic and openai support it.
-export const ocrModel = () =>
-  languageModel(process.env.OCR_MODEL || "google:gemini-3.5-flash-lite")
+export async function ocrModel() {
+  const settings = await getAiSettings()
+  return languageModel(modelIds(settings).ocr, settings)
+}
 
 // Ingest: translates non-Telugu documents to Telugu before embedding.
-export const translateModel = () =>
-  languageModel(process.env.TRANSLATE_MODEL || "google:gemini-3.5-flash-lite")
+export async function translateModel() {
+  const settings = await getAiSettings()
+  return languageModel(modelIds(settings).translate, settings)
+}
 
-// Changing this needs a full re-ingest: stored vectors only match the model that made them.
-export function embeddingModel() {
-  const [name, model] = parse(
-    process.env.EMBEDDING_MODEL || "google:gemini-embedding-001"
-  )
+// The model stays env-only: changing it needs a full re-ingest, since stored
+// vectors only match the model that made them. Its API key can come from /admin/ai.
+export async function embeddingModel() {
+  const settings = await getAiSettings()
+  const [name, model] = parse(modelIds(settings).embedding)
   if (name === "anthropic") throw new Error("Anthropic has no embedding models")
-  return name === "compat"
-    ? providers.compat().embeddingModel(model)
-    : providers[name].embeddingModel(model)
+  return provider(name, settings).embeddingModel(model)
+}
+
+// Admin "Test" button: one tiny call with the given (or saved/env) key.
+export async function testModel(id: string, config: ProviderConfig) {
+  await generateText({
+    model: languageModel(id, config),
+    prompt: "Reply with: ok",
+    maxOutputTokens: 32,
+    maxRetries: 0,
+  })
 }
 
 // 768 must match vector(768) in supabase/migrations/0001_init_pgvector.sql

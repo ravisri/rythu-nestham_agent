@@ -1,7 +1,7 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { KeyRoundIcon, UserPlusIcon } from "lucide-react"
+import { KeyRoundIcon, ShuffleIcon, UserPlusIcon } from "lucide-react"
 import { useId, useState } from "react"
 import {
   Controller,
@@ -12,6 +12,7 @@ import {
 } from "react-hook-form"
 import {
   createUser,
+  issueRecoveryCode,
   resetUserPassword,
   updatePlan,
 } from "@/app/admin/actions"
@@ -35,6 +36,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useI18n } from "@/lib/i18n/client"
 import { PLANS, type Plan } from "@/lib/plans"
 import {
   adminCreateSchema,
@@ -49,13 +52,14 @@ function PlanSelect<T extends FieldValues, U extends FieldValues>({
   control: Control<T, unknown, U>
 }) {
   const id = useId()
+  const { t } = useI18n()
   return (
     <Controller
       control={control}
       name={"plan" as Path<T>}
       render={({ field }) => (
         <Field>
-          <FieldLabel htmlFor={id}>ప్లాన్</FieldLabel>
+          <FieldLabel htmlFor={id}>{t.admin.plan}</FieldLabel>
           <Select value={field.value} onValueChange={field.onChange}>
             <SelectTrigger id={id} className="h-12 w-full text-base">
               <SelectValue />
@@ -63,8 +67,8 @@ function PlanSelect<T extends FieldValues, U extends FieldValues>({
             <SelectContent>
               {PLAN_IDS.map((id) => (
                 <SelectItem key={id} value={id}>
-                  {PLANS[id].label} ({PLANS[id].daily}/రోజు, {PLANS[id].period}
-                  {PLANS[id].perMonth ? "/నెల" : " మొత్తం"})
+                  {t.plans[id]}{" "}
+                  {t.admin.planOption(PLANS[id].daily, PLANS[id].period, PLANS[id].perMonth)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -76,10 +80,11 @@ function PlanSelect<T extends FieldValues, U extends FieldValues>({
 }
 
 function Message({ error, code }: { error: string | null; code?: string | null }) {
+  const { t, tr } = useI18n()
   if (error) {
     return (
       <Alert variant="destructive">
-        <AlertDescription>{error}</AlertDescription>
+        <AlertDescription>{tr(error)}</AlertDescription>
       </Alert>
     )
   }
@@ -87,7 +92,7 @@ function Message({ error, code }: { error: string | null; code?: string | null }
   return (
     <Alert>
       <AlertDescription>
-        రికవరీ కోడ్ (యూజర్‌కు ఇవ్వండి):{" "}
+        {t.admin.codeForUser}{" "}
         <span className="font-mono text-lg font-bold tracking-widest">
           {code}
         </span>
@@ -97,6 +102,7 @@ function Message({ error, code }: { error: string | null; code?: string | null }
 }
 
 export function CreateUserDialog() {
+  const { t } = useI18n()
   const [error, setError] = useState<string | null>(null)
   const [code, setCode] = useState<string | null>(null)
   const form = useForm({
@@ -125,14 +131,14 @@ export function CreateUserDialog() {
       <DialogTrigger asChild>
         <Button className="h-10">
           <UserPlusIcon />
-          కొత్త యూజర్
+          {t.admin.newUser}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>కొత్త యూజర్ ఖాతా</DialogTitle>
+          <DialogTitle>{t.admin.newUserTitle}</DialogTitle>
           <DialogDescription>
-            యూజర్‌నేమ్, పాస్‌వర్డ్ యూజర్‌కు తెలియజేయండి.
+            {t.admin.newUserHint}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} noValidate>
@@ -140,20 +146,20 @@ export function CreateUserDialog() {
             <FormInput
               control={form.control}
               name="username"
-              label="యూజర్‌నేమ్"
+              label={t.common.username}
               autoCapitalize="none"
             />
             <FormInput
               control={form.control}
               name="phone"
-              label="ఫోన్ (ఐచ్ఛికం)"
+              label={t.admin.phoneOptional}
               type="tel"
               inputMode="numeric"
             />
             <FormInput
               control={form.control}
               name="password"
-              label="పాస్‌వర్డ్"
+              label={t.common.password}
               type="text"
               autoComplete="off"
             />
@@ -161,7 +167,7 @@ export function CreateUserDialog() {
             <Message error={error} code={code} />
             <Button type="submit" disabled={form.formState.isSubmitting}>
               {form.formState.isSubmitting && <Spinner />}
-              ఖాతా తెరవండి
+              {t.common.createAccount}
             </Button>
           </FieldGroup>
         </form>
@@ -179,6 +185,7 @@ export function PlanForm({
   plan: Plan
   expiresOn: string
 }) {
+  const { t, tr } = useI18n()
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const form = useForm({
@@ -201,7 +208,7 @@ export function PlanForm({
         <FormInput
           control={form.control}
           name="expiresOn"
-          label={form.watch("plan") === "trial" ? "ట్రయల్ ముగింపు" : "గడువు (ఖాళీ = లేదు)"}
+          label={form.watch("plan") === "trial" ? t.admin.trialEnd : t.admin.expiryOptional}
           type="date"
         />
         <Button
@@ -211,14 +218,22 @@ export function PlanForm({
           disabled={form.formState.isSubmitting}
         >
           {form.formState.isSubmitting && <Spinner />}
-          {saved ? "సేవ్ అయింది ✓" : "సేవ్"}
+          {saved ? t.common.saved : t.common.save}
         </Button>
       </FieldGroup>
-      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+      {error && <p className="mt-2 text-sm text-destructive">{tr(error)}</p>}
     </form>
   )
 }
 
+// Easy for farmers to type and read aloud: 6 random digits.
+function randomPassword() {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000
+  return String(n).padStart(6, "0")
+}
+
+// Lost password and/or recovery code. Default tab = new recovery code only,
+// so the user sets their own password via "పాస్‌వర్డ్ మర్చిపోయారా?".
 export function PasswordDialog({
   userId,
   username,
@@ -226,59 +241,123 @@ export function PasswordDialog({
   userId: string
   username: string
 }) {
+  const { t } = useI18n()
   const [error, setError] = useState<string | null>(null)
   const [code, setCode] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState<string | null>(null)
+  const [issuing, setIssuing] = useState(false)
   const form = useForm({
     resolver: zodResolver(adminPasswordSchema),
     defaultValues: { userId, password: "" },
   })
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  const clear = () => {
     setError(null)
+    setCode(null)
+    setNewPassword(null)
+  }
+
+  async function issueCode() {
+    clear()
+    setIssuing(true)
+    const result = await issueRecoveryCode({ userId })
+    setIssuing(false)
+    if (!result.ok) return setError(result.error)
+    setCode(result.recoveryCode)
+  }
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    clear()
     const result = await resetUserPassword(values)
     if (!result.ok) return setError(result.error)
+    setNewPassword(values.password)
     setCode(result.recoveryCode)
     form.reset({ userId, password: "" })
   })
 
   return (
-    <Dialog
-      onOpenChange={(open) => {
-        if (!open) {
-          setError(null)
-          setCode(null)
-        }
-      }}
-    >
+    <Dialog onOpenChange={(open) => !open && clear()}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <KeyRoundIcon />
-          పాస్‌వర్డ్
+          {t.admin.recovery}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{username} పాస్‌వర్డ్ మార్చండి</DialogTitle>
+          <DialogTitle>{t.admin.recoveryTitle(username)}</DialogTitle>
           <DialogDescription>
-            యూజర్ అన్ని ఫోన్‌ల నుండి లాగౌట్ అవుతారు. కొత్త రికవరీ కోడ్ వస్తుంది.
+            {t.admin.verifyFirst}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} noValidate>
-          <FieldGroup>
-            <FormInput
-              control={form.control}
-              name="password"
-              label="కొత్త పాస్‌వర్డ్"
-              type="text"
-              autoComplete="off"
-            />
-            <Message error={error} code={code} />
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting && <Spinner />}
-              మార్చండి
-            </Button>
-          </FieldGroup>
-        </form>
+        <Tabs defaultValue="code" onValueChange={clear}>
+          <TabsList className="w-full">
+            <TabsTrigger value="code">{t.common.recoveryCode}</TabsTrigger>
+            <TabsTrigger value="password">{t.common.newPassword}</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="code">
+            <FieldGroup>
+              <p className="text-sm text-muted-foreground">
+                {t.admin.codeHelp}
+              </p>
+              <Message error={error} code={code} />
+              <Button type="button" onClick={issueCode} disabled={issuing}>
+                {issuing && <Spinner />}
+                {t.admin.issueCode}
+              </Button>
+            </FieldGroup>
+          </TabsContent>
+
+          <TabsContent value="password">
+            <form onSubmit={onSubmit} noValidate>
+              <FieldGroup>
+                <p className="text-sm text-muted-foreground">
+                  {t.admin.passwordHelp}
+                </p>
+                <div className="flex items-start gap-2">
+                  <div className="flex-1">
+                    <FormInput
+                      control={form.control}
+                      name="password"
+                      label={t.common.newPassword}
+                      type="text"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="mt-7 h-12"
+                    onClick={() =>
+                      form.setValue("password", randomPassword(), {
+                        shouldValidate: true,
+                      })
+                    }
+                  >
+                    <ShuffleIcon />
+                    {t.admin.generate}
+                  </Button>
+                </div>
+                {newPassword && !error && (
+                  <Alert>
+                    <AlertDescription>
+                      {t.admin.newPasswordIs}{" "}
+                      <span className="font-mono text-lg font-bold tracking-widest">
+                        {newPassword}
+                      </span>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <Message error={error} code={code} />
+                <Button type="submit" disabled={form.formState.isSubmitting}>
+                  {form.formState.isSubmitting && <Spinner />}
+                  {t.admin.change}
+                </Button>
+              </FieldGroup>
+            </form>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )

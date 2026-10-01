@@ -10,14 +10,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-
-const STEPS = [
-  { icon: MicIcon, text: "‘మాట్లాడండి’ నొక్కి, మీ పంట సమస్యను తెలుగులో చెప్పండి." },
-  { icon: CameraIcon, text: "‘ఫోటో’ నొక్కి, ఆకు లేదా పంట ఫోటో పంపండి." },
-  { icon: KeyboardIcon, text: "లేదా కింద టైప్ చేసి పంపండి." },
-]
+import { useI18n } from "@/lib/i18n/client"
 
 export function HelpDialog() {
+  const { t } = useI18n()
+  const steps = [
+    { icon: MicIcon, text: t.help.mic },
+    { icon: CameraIcon, text: t.help.camera },
+    { icon: KeyboardIcon, text: t.help.keyboard },
+  ]
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -25,20 +26,20 @@ export function HelpDialog() {
           variant="outline"
           size="icon"
           className="size-10 rounded-xl"
-          aria-label="ఎలా వాడాలి"
+          aria-label={t.help.open}
         >
           <CircleHelpIcon />
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>ఎలా వాడాలి?</DialogTitle>
+          <DialogTitle>{t.help.title}</DialogTitle>
           <DialogDescription>
-            సమాధానం తెలుగులో చదవవచ్చు, వినవచ్చు, WhatsApp లో పంపవచ్చు.
+            {t.help.body}
           </DialogDescription>
         </DialogHeader>
         <ul className="space-y-3">
-          {STEPS.map(({ icon: Icon, text }) => (
+          {steps.map(({ icon: Icon, text }) => (
             <li key={text} className="flex items-center gap-3">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Icon className="size-5" />
@@ -48,8 +49,7 @@ export function HelpDialog() {
           ))}
         </ul>
         <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-          మంచి ఫోటో కోసం: పగటి వెలుతురులో, సమస్య ఉన్న ఆకును దగ్గరగా తీయండి. AI సలహా
-          మాత్రమే — మందులు వాడే ముందు స్థానిక వ్యవసాయ అధికారిని సంప్రదించండి.
+          {t.help.tip}
         </p>
       </DialogContent>
     </Dialog>

@@ -189,7 +189,7 @@ export async function POST(req: Request) {
   }
   const usage = await usageSummary(user)
 
-  const model = chatModel()
+  const model = await chatModel()
   const result = streamText({
     model,
     system: systemPrompt(results, hasImage),

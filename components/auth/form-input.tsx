@@ -14,6 +14,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { useI18n } from "@/lib/i18n/client"
 
 type FormInputProps<T extends FieldValues, U extends FieldValues> = {
   control: Control<T, unknown, U>
@@ -31,6 +32,7 @@ export function FormInput<T extends FieldValues, U extends FieldValues>({
   ...inputProps
 }: FormInputProps<T, U>) {
   const id = `${useId()}-${name}` // unique even with many forms on one page
+  const { tr } = useI18n()
   return (
     <Controller
       control={control}
@@ -49,7 +51,7 @@ export function FormInput<T extends FieldValues, U extends FieldValues>({
             className="h-12 text-base"
           />
           {description && <FieldDescription>{description}</FieldDescription>}
-          {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+          {fieldState.invalid && <FieldError errors={[{ message: tr(fieldState.error?.message ?? "") }]} />}
         </Field>
       )}
     />

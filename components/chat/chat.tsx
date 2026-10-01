@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState, type ChangeEvent } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
@@ -9,7 +8,6 @@ import {
   CameraIcon,
   MicIcon,
   MoonIcon,
-  ShieldIcon,
   SproutIcon,
   SunIcon,
   Trash2Icon,
@@ -54,6 +52,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
+import { ProfileMenu } from "@/components/chat/profile-menu"
+import type { Dictionary } from "@/lib/i18n/dictionaries"
+import { useI18n } from "@/lib/i18n/client"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis"
 import { clearChat, loadChat, saveChat } from "@/lib/chat-history"
@@ -71,8 +72,8 @@ import { Actions, Sources } from "./message-extras"
 import { Welcome } from "./welcome"
 
 const transport = new DefaultChatTransport({ api: "/api/chat" })
+// Sent to the AI with a photo-only question: always Telugu.
 const IMAGE_ONLY_TEXT = "ఈ ఫోటో చూసి సమస్య, పరిష్కారం చెప్పండి."
-const GENERIC_ERROR = "క్షమించండి, సమస్య వచ్చింది. దయచేసి మళ్లీ ప్రయత్నించండి."
 
 type FileInput = { url: string; filename?: string }
 type ToolPart = { type: string; state?: string; output?: unknown }
@@ -127,24 +128,29 @@ function sourcesOf(message: UIMessage): string[] {
   ]
 }
 
-function progressLabel(last: UIMessage | undefined): string {
-  if (last?.role !== "assistant") return "ఆలోచిస్తున్నాను…"
+function progressLabel(last: UIMessage | undefined, t: Dictionary): string {
+  if (last?.role !== "assistant") return t.chat.thinking
   const tool = toolPart(last)
-  if (!tool) return "ఆలోచిస్తున్నాను…"
-  return tool.state === "output-available"
-    ? "సమాధానం సిద్ధం చేస్తోంది…"
-    : "ANGRAU / ICAR లో వెతుకుతోంది…"
+  if (!tool) return t.chat.thinking
+  return tool.state === "output-available" ? t.chat.preparing : t.chat.searching
 }
 
-type ChatProps = { userId: string; isAdmin: boolean; usage: Usage }
+type ChatProps = {
+  userId: string
+  username: string
+  isAdmin: boolean
+  usage: Usage
+}
 
 function ChatInner({
   userId,
+  username,
   isAdmin,
   usage,
   initialMessages,
 }: ChatProps & { initialMessages: UIMessage[] }) {
   const router = useRouter()
+  const { t } = useI18n()
   const { messages, sendMessage, setMessages, status, error, stop } = useChat({
     transport,
     messages: initialMessages,
@@ -303,16 +309,17 @@ function ChatInner({
 
   const micNotice =
     mic.error === "not-allowed"
-      ? "మైక్రోఫోన్ అనుమతి ఇవ్వండి."
+      ? t.chat.micDenied
       : mic.error === "no-speech"
-        ? "మాట వినపడలేదు. మళ్లీ ప్రయత్నించండి."
+        ? t.chat.micNoSpeech
         : mic.error
-          ? "మైక్ పనిచేయడం లేదు. టైప్ చేయండి."
+          ? t.chat.micBroken
           : null
+  // Telugu server replies (limits, session) are shown as-is: they are read aloud.
   const errorText = error
     ? /[ఀ-౿]/.test(error.message)
       ? error.message
-      : GENERIC_ERROR
+      : t.chat.genericError
     : null
   const alertText = notice ?? micNotice ?? errorText
   const bodySize = largeText ? "text-xl" : "text-base"
@@ -324,28 +331,17 @@ function ChatInner({
           <SproutIcon className="size-6" />
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="text-lg leading-tight font-semibold">రైతు నేస్తం</h1>
+          <h1 className="text-lg leading-tight font-semibold">{t.common.appName}</h1>
           <p className="truncate text-sm text-muted-foreground">
             {usage.status === "active"
-              ? `${usage.planLabel} · మిగిలిన ప్రశ్నలు: ${left}`
+              ? `${t.plans[usage.plan]} · ${t.chat.left(left)}`
               : usage.status === "trial_over"
-                ? "ఉచిత ట్రయల్ ముగిసింది"
-                : "ప్లాన్ గడువు ముగిసింది"}
+                ? t.chat.trialOver
+                : t.chat.planExpired}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {isAdmin && (
-            <Button
-              asChild
-              variant="outline"
-              size="icon"
-              className="size-10 rounded-xl"
-            >
-              <Link href="/admin" aria-label="అడ్మిన్">
-                <ShieldIcon />
-              </Link>
-            </Button>
-          )}
+          <ProfileMenu username={username} isAdmin={isAdmin} />
           {messages.length > 0 && (
             <Dialog>
               <DialogTrigger asChild>
@@ -353,7 +349,7 @@ function ChatInner({
                   variant="outline"
                   size="icon"
                   className="size-10 rounded-xl"
-                  aria-label="చాట్ తొలగించు"
+                  aria-label={t.chat.clearChat}
                   disabled={busy}
                 >
                   <Trash2Icon />
@@ -361,15 +357,15 @@ function ChatInner({
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>చాట్ మొత్తం తొలగించాలా?</DialogTitle>
+                  <DialogTitle>{t.chat.clearTitle}</DialogTitle>
                   <DialogDescription className="text-base">
-                    ఈ ఫోన్‌లో ఉన్న ప్రశ్నలు, సమాధానాలు అన్నీ తొలగిపోతాయి.
+                    {t.chat.clearBody}
                   </DialogDescription>
                 </DialogHeader>
                 <DialogFooter className="gap-2">
                   <DialogClose asChild>
                     <Button variant="outline" className="h-11 text-base">
-                      వద్దు
+                      {t.common.cancel}
                     </Button>
                   </DialogClose>
                   <DialogClose asChild>
@@ -379,7 +375,7 @@ function ChatInner({
                       onClick={clearHistory}
                     >
                       <Trash2Icon />
-                      తొలగించు
+                      {t.common.remove}
                     </Button>
                   </DialogClose>
                 </DialogFooter>
@@ -391,7 +387,7 @@ function ChatInner({
             variant="outline"
             size="icon"
             className="size-10 rounded-xl text-base font-semibold"
-            aria-label="అక్షరాల పరిమాణం"
+            aria-label={t.chat.textSize}
             aria-pressed={largeText}
             onClick={toggleTextSize}
           >
@@ -401,7 +397,7 @@ function ChatInner({
             variant="outline"
             size="icon"
             className="size-10 rounded-xl"
-            aria-label="లైట్ / డార్క్"
+            aria-label={t.chat.theme}
             onClick={() =>
               setTheme(resolvedTheme === "dark" ? "light" : "dark")
             }
@@ -412,8 +408,8 @@ function ChatInner({
         </div>
       </header>
 
-      <Conversation className="flex-1 max-w-5xl mx-auto w-full">
-        <ConversationContent className="gap-6">
+      <Conversation className="flex-1 w-full">
+        <ConversationContent className="gap-6 mx-auto max-w-6xl w-full ">
           {messages.length === 0 ? (
             <ConversationEmptyState className="justify-start p-0">
               <Welcome
@@ -433,7 +429,7 @@ function ChatInner({
               const isUser = message.role === "user"
 
               const content = (
-                <Message from={message.role} className="max-w-full">
+                <Message from={message.role} className="max-w-5xl">
                   <MessageContent
                     className={`${bodySize} leading-relaxed group-[.is-assistant]:rounded-2xl group-[.is-assistant]:border group-[.is-assistant]:bg-card group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-user]:rounded-2xl group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground`}
                   >
@@ -442,7 +438,7 @@ function ChatInner({
                       <img
                         key={i}
                         src={image.url}
-                        alt="పంట ఫోటో"
+                        alt={t.chat.cropPhoto}
                         className="max-h-48 rounded-xl object-cover"
                       />
                     ))}
@@ -485,7 +481,7 @@ function ChatInner({
           )}
           {showProgress && (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Spinner /> {progressLabel(last)}
+              <Spinner /> {progressLabel(last, t)}
             </div>
           )}
         </ConversationContent>
@@ -509,7 +505,7 @@ function ChatInner({
           accept="image/*"
           maxFiles={1}
           maxFileSize={10 * 1024 * 1024}
-          onError={() => setNotice("ఒక ఫోటో మాత్రమే (10MB లోపు) పంపండి.")}
+          onError={() => setNotice(t.chat.photoLimit)}
           className="rounded-2xl max-w-5xl mx-auto"
         >
           {attachments.files.length > 0 && (
@@ -519,12 +515,12 @@ function ChatInner({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={file.url}
-                    alt="ఎంచుకున్న ఫోటో"
+                    alt={t.chat.selectedPhoto}
                     className="size-16 rounded-lg object-cover"
                   />
                   <button
                     type="button"
-                    aria-label="ఫోటో తొలగించు"
+                    aria-label={t.chat.removePhoto}
                     onClick={() => attachments.remove(file.id)}
                     className="absolute -top-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full border bg-background"
                   >
@@ -555,8 +551,8 @@ function ChatInner({
           <PromptInputTextarea
             placeholder={
               teluguTyping
-                ? "ఇంగ్లీష్‌లో టైప్ చేయండి (mirchi → మిర్చి)"
-                : "తెలుగులో టైప్ చేయండి…"
+                ? t.chat.placeholderTranslit
+                : t.chat.placeholder
             }
             className={`min-h-14 ${bodySize}`}
             disabled={busy}
@@ -576,14 +572,14 @@ function ChatInner({
                 onClick={() => attachments.openFileDialog()}
               >
                 <CameraIcon className="size-6" />
-                <span>ఫోటో</span>
+                <span>{t.chat.photo}</span>
               </PromptInputButton>
               <PromptInputButton
                 variant={teluguTyping ? "default" : "secondary"}
                 size="sm"
                 className="h-14 w-20 flex-col gap-1 rounded-xl text-sm"
                 aria-pressed={teluguTyping}
-                aria-label="ఇంగ్లీష్ అక్షరాలను తెలుగుగా మార్చు"
+                aria-label={t.chat.translitToggle}
                 onClick={toggleTeluguTyping}
               >
                 <span className="text-xl leading-none font-semibold">
@@ -600,7 +596,7 @@ function ChatInner({
                   onClick={mic.listening ? mic.stop : mic.start}
                 >
                   <MicIcon className="size-6" />
-                  <span>{mic.listening ? "ఆపండి" : "మాట్లాడండి"}</span>
+                  <span>{mic.listening ? t.chat.stop : t.chat.speak}</span>
                 </PromptInputButton>
               )}
             </PromptInputTools>
@@ -612,8 +608,7 @@ function ChatInner({
           </PromptInputFooter>
         </PromptInput>
         <p className="text-center text-xs text-muted-foreground">
-          AI సలహా మాత్రమే. మందులు వాడే ముందు స్థానిక వ్యవసాయ అధికారిని
-          సంప్రదించండి.
+          {t.chat.disclaimer}
         </p>
       </div>
     </div>

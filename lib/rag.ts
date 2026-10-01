@@ -6,7 +6,7 @@ import { getSupabase } from "@/lib/supabase"
 
 export async function embedQuery(text: string): Promise<number[]> {
   const { embedding } = await embed({
-    model: embeddingModel(),
+    model: await embeddingModel(),
     value: text,
     providerOptions: options("RETRIEVAL_QUERY"),
   })
@@ -15,7 +15,7 @@ export async function embedQuery(text: string): Promise<number[]> {
 
 export async function embedDocuments(texts: string[]): Promise<number[][]> {
   const { embeddings } = await embedMany({
-    model: embeddingModel(),
+    model: await embeddingModel(),
     values: texts,
     providerOptions: options("RETRIEVAL_DOCUMENT"),
   })
