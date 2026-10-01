@@ -1,6 +1,13 @@
-// Usage: npm run ingest                  (all files under data/pdfs/<crop>/*.pdf|txt|md)
+// Usage: npm run ingest                  (all files under data/pdfs/<crop>/:
+//                                         .pdf .docx .txt .md and images .jpg .png .webp)
+// Non-Telugu text (English, Hindi, ...) is translated to Telugu once (TRANSLATE_MODEL,
+// cached in data/translations/) before embedding, so Telugu questions find it.
 //        npm run ingest -- --crop paddy  (only paddy sections / folders)
 //        npm run ingest -- --force       (redo sections that are already stored)
+//        ... --sections cotton/cultivation,general/irrigation  (only those manifest sections)
+//        npm run ingest:file chilli_file.docx   (only that file; add --force to re-embed it)
+// Never duplicates: a file replaces its own rows; the same file under another name and
+// chunks already stored from another file are skipped.
 //        npm run ingest:ocr              (only fill the OCR cache, no embedding / DB writes)
 // Re-running continues where it stopped: stored sections are skipped, OCR pages come from data/ocr/.
 // Needs in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and the API key
@@ -15,16 +22,25 @@ import { createHash } from "node:crypto"
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { APICallError, generateText, RetryError } from "ai"
+import mammoth from "mammoth"
 import { PDFDocument } from "pdf-lib"
 import { extractText, getDocumentProxy } from "unpdf"
-import { ocrModel, reasoningOptions } from "@/lib/ai"
+import { ocrModel, reasoningOptions, translateModel } from "@/lib/ai"
 import { CROPS, isCrop } from "@/lib/crops"
-import { visionEnabled, VisionError, visionOcr } from "@/lib/ocr"
+import {
+  visionEnabled,
+  VisionError,
+  visionImageOcr,
+  visionOcr,
+} from "@/lib/ocr"
 import { embedDocuments } from "@/lib/rag"
 import { getSupabase } from "@/lib/supabase"
 
 const ROOT = path.join(process.cwd(), "data", "pdfs")
 const OCR_CACHE = path.join(process.cwd(), "data", "ocr")
+const TRANSLATION_CACHE = path.join(process.cwd(), "data", "translations")
+const SUPPORTED = /\.(pdf|txt|md|docx|jpe?g|png|webp)$/i
+const TRANSLATE_WORDS = 700 // per call: ~1 page in, ~3k Telugu tokens out
 const OCR_PAGES_PER_CALL = 5
 const CHUNK_WORDS = 120 // ~800 Telugu chars; must fit MAX_CHARS in lib/rag.ts
 const OVERLAP_WORDS = 20
@@ -33,6 +49,14 @@ const BATCH = 10
 const EMBED_PAUSE_MS = 20_000
 const ONLY_CROP = process.argv.includes("--crop")
   ? process.argv[process.argv.indexOf("--crop") + 1]
+  : undefined
+// --sections cotton/cultivation,general/irrigation -> only those manifest sections
+const ONLY_SECTIONS = process.argv.includes("--sections")
+  ? new Set(process.argv[process.argv.indexOf("--sections") + 1]?.split(","))
+  : undefined
+// --file chilli_file.docx -> only that file (name, case-insensitive)
+const ONLY_FILE = process.argv.includes("--file")
+  ? process.argv[process.argv.indexOf("--file") + 1]?.toLowerCase()
   : undefined
 const FORCE = process.argv.includes("--force")
 const OCR_ONLY = process.argv.includes("--ocr-only")
@@ -197,9 +221,12 @@ class PdfReader {
       `p${pad(pages[0])}-${pad(pages[pages.length - 1])}.txt`
     )
     const cached = await readFile(cacheFile, "utf8").catch(() => undefined)
-    if (cached !== undefined) {
+    if (cached !== undefined && garbledShare(cached) <= GARBLED) {
       console.log(`    PDF pages ${range}: cached`)
       return cached
+    }
+    if (cached !== undefined) {
+      console.log(`    PDF pages ${range}: cached text is garbled, OCR again`)
     }
 
     this.src ??= await PDFDocument.load(this.bytes, { ignoreEncryption: true })
@@ -222,47 +249,198 @@ class PdfReader {
   }
 }
 
-async function llmOcr(data: Uint8Array, range: string): Promise<string> {
+// Claude also receives the PDF text layer, which is garbled for legacy Telugu
+// fonts — tell it to read the page images instead.
+const PDF_OCR_PROMPT =
+  "Transcribe the page IMAGES faithfully. Ignore the PDF's embedded text layer: it may use a broken legacy font encoding (looks like 'X¯óuÛÑø£'). Write Telugu in Unicode Telugu script and English as English. Keep table rows on one line each, no markdown tables. Output plain text only."
+const IMAGE_OCR_PROMPT =
+  "Transcribe all text in this image faithfully (posters, leaflets, tables, labels). Write Telugu in Unicode Telugu script and English as English. Keep table rows on one line each, no markdown tables. Output plain text only. If the image has no readable text, output nothing."
+
+async function llmOcr(
+  data: Uint8Array,
+  label: string,
+  mediaType = "application/pdf"
+): Promise<string> {
   const model = ocrModel()
   const result = await withRetry("OCR", () =>
-      generateText({
-        model,
-        providerOptions: reasoningOptions(model.modelId, "none"),
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                // Claude also receives the PDF text layer, which is garbled for
-                // legacy Telugu fonts — tell it to read the page images instead.
-                text: "Transcribe the page IMAGES faithfully. Ignore the PDF's embedded text layer: it may use a broken legacy font encoding (looks like 'X¯óuÛÑø£'). Write Telugu in Unicode Telugu script and English as English. Keep table rows on one line each, no markdown tables. Output plain text only.",
-              },
-              { type: "file", data, mediaType: "application/pdf" },
-            ],
-          },
-        ],
-      })
-    )
+    generateText({
+      model,
+      providerOptions: reasoningOptions(model.modelId, "none"),
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: mediaType === "application/pdf" ? PDF_OCR_PROMPT : IMAGE_OCR_PROMPT,
+            },
+            { type: "file", data, mediaType },
+          ],
+        },
+      ],
+    })
+  )
   if (result.finishReason === "length") {
-    console.log(`    PDF pages ${range}: WARNING output was cut off`)
+    console.log(`    ${label}: WARNING output was cut off`)
   }
   return result.text
 }
 
-type Piece = { content: string; pages?: string }
+const IMAGE_TYPES: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+}
 
+// OCR one image file; cached in data/ocr/<file name>.txt.
+async function ocrImage(file: string, mediaType: string): Promise<string> {
+  const cacheFile = path.join(OCR_CACHE, `${path.basename(file)}.txt`)
+  const cached = await readFile(cacheFile, "utf8").catch(() => undefined)
+  if (cached !== undefined) {
+    console.log("    image: cached")
+    return cached
+  }
+  const data = new Uint8Array(await readFile(file))
+  const text = visionEnabled()
+    ? await withRetry("OCR", () => visionImageOcr(data))
+    : await llmOcr(data, "image", mediaType)
+  await mkdir(OCR_CACHE, { recursive: true })
+  await writeFile(cacheFile, text, "utf8")
+  console.log("    image: OCR done")
+  return text
+}
+
+// Text of a non-PDF file: Word document, image (OCR) or plain text / markdown.
+async function readDocument(file: string): Promise<string> {
+  const ext = path.extname(file).toLowerCase()
+  if (ext === ".docx") {
+    return (await mammoth.extractRawText({ path: file })).value
+  }
+  const mediaType = IMAGE_TYPES[ext]
+  if (mediaType) return ocrImage(file, mediaType)
+  return readFile(file, "utf8")
+}
+
+// Telugu share of all letters (marks/digits/punctuation ignored).
+function teluguShare(text: string): number {
+  const telugu = text.match(/[ఀ-౿]/g)?.length ?? 0
+  const other = text.match(/[^\s\d\p{P}\p{S}ఀ-౿]/gu)?.length ?? 0
+  return telugu + other === 0 ? 1 : telugu / (telugu + other)
+}
+
+const TRANSLATE_PROMPT = `Translate the user's agricultural text into simple, conversational Telugu that farmers in Telangana and Andhra Pradesh understand.
+- Translate everything faithfully: do not add, remove or summarise anything.
+- Keep all numbers, doses and units exactly (ml, g, kg, litre, acre, %, days).
+- Write pesticide, chemical, fertiliser and variety names in Telugu letters followed by the original name in brackets, e.g. ఇమిడాక్లోప్రిడ్ (Imidacloprid).
+- Keep table rows on one line each. Output only the Telugu text.`
+
+// Translate one segment; cached by content hash in data/translations/.
+async function translate(segment: string): Promise<string> {
+  const cacheFile = path.join(TRANSLATION_CACHE, `${hashOf(segment)}.txt`)
+  const cached = await readFile(cacheFile, "utf8").catch(() => undefined)
+  if (cached !== undefined && teluguShare(cached) >= 0.5) return cached
+
+  const model = translateModel()
+  const run = (system: string) =>
+    withRetry("translate", () =>
+      generateText({
+        model,
+        system,
+        prompt: segment,
+        maxOutputTokens: 8000,
+        providerOptions: reasoningOptions(model.modelId, "none"),
+      })
+    )
+  let result = await run(TRANSLATE_PROMPT)
+  // Small models sometimes leave headings / lists in English: retry once.
+  if (teluguShare(result.text) < 0.5) {
+    result = await run(`${TRANSLATE_PROMPT}\n${TRANSLATE_STRICT}`)
+  }
+  if (result.finishReason === "length") {
+    console.log("    translate: WARNING output was cut off")
+  }
+  if (teluguShare(result.text) < 0.5) {
+    console.log("    translate: WARNING result is still mostly not Telugu")
+    return result.text // not cached, so the next run tries again
+  }
+  await mkdir(TRANSLATION_CACHE, { recursive: true })
+  await writeFile(cacheFile, result.text, "utf8")
+  await sleep(2000)
+  return result.text
+}
+
+const TRANSLATE_STRICT =
+  "IMPORTANT: translate EVERY sentence into Telugu, including English headings, lists and table text. Never leave an English sentence untranslated; only chemical/variety names in brackets stay English."
+
+// Legacy Telugu fonts read as Latin-1 junk, e.g. "ˇø£ bı\+ qT+&ç".
+function garbledShare(text: string): number {
+  const junk = text.match(/[À-ÿ¯£∑≈√‡˚˜˙ˆˇ]/g)?.length ?? 0
+  return junk / Math.max(1, text.length)
+}
+const GARBLED = 0.03
+
+// Any language -> Telugu (Telugu questions match Telugu text best).
+async function toTelugu(text: string): Promise<string> {
+  if (!text.trim() || teluguShare(text) >= 0.5) return text
+  const words = text.split(/\s+/).filter(Boolean)
+  const parts: string[] = []
+  for (let i = 0; i < words.length; i += TRANSLATE_WORDS) {
+    parts.push(await translate(words.slice(i, i + TRANSLATE_WORDS).join(" ")))
+  }
+  console.log(`    translated to Telugu (${parts.length} part(s))`)
+  return parts.join("\n")
+}
+
+type Piece = { content: string; pages?: string; translated?: boolean }
+
+// Chunk hashes already stored by OTHER files (so the same text is never stored twice).
+async function storedElsewhere(
+  hashes: string[],
+  source: string
+): Promise<Map<string, string>> {
+  const found = new Map<string, string>() // hash -> source that has it
+  for (let i = 0; i < hashes.length; i += 100) {
+    const { data, error } = await getSupabase()
+      .from("crop_knowledge")
+      .select("hash:metadata->>hash, source:metadata->>source")
+      .in("metadata->>hash", hashes.slice(i, i + 100))
+      .neq("metadata->>source", source)
+    if (error) throw error
+    for (const row of data as { hash: string; source: string }[]) {
+      found.set(row.hash, row.source)
+    }
+  }
+  return found
+}
+
+// Returns how many chunks were stored (0 = nothing new).
 async function store(
-  pieces: Piece[],
+  all: Piece[],
   job: Job,
   source: string,
+  fileHash: string,
   state?: string
-) {
+): Promise<number> {
   const supabase = getSupabase()
+  const elsewhere = await storedElsewhere(
+    all.map((p) => hashOf(p.content)),
+    source
+  )
+  const pieces = all.filter((p) => !elsewhere.has(hashOf(p.content)))
+  if (elsewhere.size > 0) {
+    const from = [...new Set(elsewhere.values())].join(", ")
+    console.log(
+      `    skipped ${all.length - pieces.length} chunk(s) already stored from ${from}`
+    )
+  }
+  if (pieces.length === 0) return 0
+
   const hashes = pieces.map((p) => hashOf(p.content))
   if (await isUnchanged(job, source, hashes)) {
+    await addFileHash(job, source, fileHash)
     console.log("    text unchanged, embedding skipped")
-    return
+    return 0
   }
   const del = supabase
     .from("crop_knowledge")
@@ -278,16 +456,18 @@ async function store(
     const embeddings = await withRetry("embed", () =>
       embedDocuments(batch.map((p) => p.content))
     )
-    const rows = batch.map(({ content, pages }, j) => ({
+    const rows = batch.map(({ content, pages, translated }, j) => ({
       content,
       metadata: {
         hash: hashes[i + j],
+        file_hash: fileHash,
         crop: job.crop,
         source,
         ...(job.topic && { topic: job.topic }),
         ...(job.section && { section: job.section }),
         ...(state && { state }),
         ...(pages && { pages }),
+        ...(translated && { translated: true }),
       },
       embedding: embeddings[j],
     }))
@@ -295,6 +475,39 @@ async function store(
     if (error) throw error
     if (i + BATCH < pieces.length) await sleep(EMBED_PAUSE_MS)
   }
+  return pieces.length
+}
+
+// Rows stored before file_hash existed: add it (no re-embedding needed).
+async function addFileHash(job: Job, source: string, fileHash: string) {
+  const query = getSupabase()
+    .from("crop_knowledge")
+    .select("id, metadata")
+    .eq("metadata->>source", source)
+    .is("metadata->>file_hash", null)
+  const { data, error } = job.section
+    ? await query.eq("metadata->>section", job.section)
+    : await query
+  if (error) throw error
+  for (const row of data as { id: string; metadata: Record<string, unknown> }[]) {
+    const { error: updateError } = await getSupabase()
+      .from("crop_knowledge")
+      .update({ metadata: { ...row.metadata, file_hash: fileHash } })
+      .eq("id", row.id)
+    if (updateError) throw updateError
+  }
+}
+
+// The same file under another name / folder is never embedded twice.
+async function storedAs(fileHash: string, source: string) {
+  const { data, error } = await getSupabase()
+    .from("crop_knowledge")
+    .select("source:metadata->>source")
+    .eq("metadata->>file_hash", fileHash)
+    .neq("metadata->>source", source)
+    .limit(1)
+  if (error) throw error
+  return (data as { source: string }[])[0]?.source
 }
 
 const hashOf = (text: string) =>
@@ -333,15 +546,25 @@ async function ingest(file: string, folderCrop: string) {
   const manifest = await readManifest(file)
   const source = manifest.source ?? path.basename(file)
   const jobs = jobsFor(manifest, folderCrop).filter(
-    (j) => !ONLY_CROP || j.crop === ONLY_CROP
+    (j) =>
+      (!ONLY_CROP || j.crop === ONLY_CROP) &&
+      (!ONLY_SECTIONS || ONLY_SECTIONS.has(`${j.crop}/${j.topic}`))
   )
   if (jobs.length === 0) return
   console.log(
     `Ingesting ${path.relative(ROOT, file)} (${jobs.length} section(s))`
   )
 
-  const isPdf = path.extname(file).toLowerCase() === ".pdf"
-  if (OCR_ONLY && !isPdf) return
+  const ext = path.extname(file).toLowerCase()
+  const isPdf = ext === ".pdf"
+  if (OCR_ONLY && !isPdf && !IMAGE_TYPES[ext]) return
+
+  const fileHash = hashOf((await readFile(file)).toString("base64"))
+  const duplicateOf = await storedAs(fileHash, source)
+  if (duplicateOf) {
+    console.log(`  same file already embedded as "${duplicateOf}" — skipped`)
+    return
+  }
   let reader: PdfReader | undefined
 
   for (const job of jobs) {
@@ -355,10 +578,10 @@ async function ingest(file: string, folderCrop: string) {
     // Short header on every piece: better retrieval for ~10 tokens.
     const header = `${CROPS[job.crop as keyof typeof CROPS] ?? job.crop} (${label}): `
 
-    const pieces: Piece[] = []
+    // Raw text per part: a PDF page batch, or the whole docx / image / text file.
+    const parts: { text: string; pages?: string }[] = []
     if (!reader) {
-      const text = await readFile(file, "utf8")
-      pieces.push(...chunk(text).map((c) => ({ content: header + c })))
+      parts.push({ text: await readDocument(file) })
     } else {
       const total = reader.pageCount
       const all = Array.from({ length: total }, (_, i) => i + 1)
@@ -369,10 +592,7 @@ async function ingest(file: string, folderCrop: string) {
         const first = batch[0] - job.offset
         const last = batch[batch.length - 1] - job.offset
         const cited = first === last ? `${first}` : `${first}-${last}`
-        const text = await reader.read(batch)
-        pieces.push(
-          ...chunk(text).map((c) => ({ content: header + c, pages: cited }))
-        )
+        parts.push({ text: await reader.read(batch), pages: cited })
       }
     }
 
@@ -380,12 +600,33 @@ async function ingest(file: string, folderCrop: string) {
       console.log("    OCR complete")
       continue
     }
+
+    const pieces: Piece[] = []
+    let dropped = 0
+    for (const part of parts) {
+      const telugu = await toTelugu(part.text)
+      for (const c of chunk(telugu)) {
+        // Unreadable legacy-font junk would only pollute search results.
+        if (garbledShare(c) > GARBLED) {
+          dropped++
+          continue
+        }
+        // A chunk the document-level translation left in English.
+        const english = teluguShare(c) < 0.5
+        pieces.push({
+          content: header + (english ? await translate(c) : c),
+          pages: part.pages,
+          translated: english || telugu !== part.text,
+        })
+      }
+    }
+    if (dropped) console.log(`    dropped ${dropped} garbled chunk(s)`)
     if (pieces.length === 0) {
       console.log("    no text found, skipped")
       continue
     }
-    await store(pieces, job, source, manifest.state)
-    console.log(`    stored ${pieces.length} chunks (${label})`)
+    const stored = await store(pieces, job, source, fileHash, manifest.state)
+    if (stored > 0) console.log(`    stored ${stored} chunks (${label})`)
   }
 }
 
@@ -396,11 +637,21 @@ async function main() {
       "Put files in data/pdfs/<crop>/, e.g. data/pdfs/paddy/guide.pdf"
     )
   }
+  let matched = false
   for (const dir of dirs.filter((d) => d.isDirectory())) {
     for (const f of await readdir(path.join(ROOT, dir.name))) {
-      if (/\.(pdf|txt|md)$/i.test(f))
-        await ingest(path.join(ROOT, dir.name, f), dir.name)
+      // "~$x.docx" = Word's temporary lock file while the document is open.
+      if (!SUPPORTED.test(f) || f.startsWith("~$")) continue
+      if (ONLY_FILE && f.toLowerCase() !== ONLY_FILE) continue
+      matched = true
+      await ingest(path.join(ROOT, dir.name, f), dir.name)
     }
+  }
+  if (ONLY_FILE && !matched) {
+    console.error(
+      `No file "${ONLY_FILE}" found in data/pdfs/<crop>/ (supported: pdf, docx, txt, md, jpg, png, webp)`
+    )
+    process.exitCode = 1
   }
 }
 

@@ -32,7 +32,31 @@ type Match = {
   } | null
 }
 
-const MAX_CHARS = 1000
+const MAX_CHARS = 800
+const CANDIDATES = 12
+const MAX_RESULTS = 6
+const MAX_PER_SOURCE = 2 // so one guide can't fill every slot
+
+// Best matches first with at most MAX_PER_SOURCE per file, so several guides
+// get a say; if fewer files match, the free slots go to the next-best chunks.
+function diverse(rows: Match[]): Match[] {
+  const perSource = new Map<string, number>()
+  const picked = new Set<Match>()
+  for (const row of rows) {
+    const source = row.metadata?.source ?? ""
+    const used = perSource.get(source) ?? 0
+    if (used >= MAX_PER_SOURCE) continue
+    perSource.set(source, used + 1)
+    picked.add(row)
+    if (picked.size === MAX_RESULTS) break
+  }
+  for (const row of rows) {
+    if (picked.size === MAX_RESULTS) break
+    picked.add(row)
+  }
+  // Keep similarity order (rows arrive best-first).
+  return rows.filter((row) => picked.has(row))
+}
 
 // With a known crop, only that crop's text plus general advice is searched.
 export async function searchKnowledge(query: string, crop?: Crop) {
@@ -40,12 +64,12 @@ export async function searchKnowledge(query: string, crop?: Crop) {
     const { data, error } = await getSupabase().rpc("match_crop_knowledge", {
       query_embedding: await embedQuery(query),
       match_threshold: 0.6, // relevant Telugu matches ~0.7+, off-topic ~0.5
-      match_count: 3,
+      match_count: CANDIDATES,
       crops: crop && crop !== "general" ? [crop, "general"] : null,
     })
     if (error) throw error
 
-    const results = ((data ?? []) as Match[])
+    const results = diverse((data ?? []) as Match[])
       .map((row) => ({
         text: redactBanned(row.content).slice(0, MAX_CHARS),
         crop: row.metadata?.crop,

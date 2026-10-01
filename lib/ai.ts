@@ -63,6 +63,10 @@ export const chatModel = () =>
 export const ocrModel = () =>
   languageModel(process.env.OCR_MODEL || "google:gemini-3.5-flash-lite")
 
+// Ingest: translates non-Telugu documents to Telugu before embedding.
+export const translateModel = () =>
+  languageModel(process.env.TRANSLATE_MODEL || "google:gemini-3.5-flash-lite")
+
 // Changing this needs a full re-ingest: stored vectors only match the model that made them.
 export function embeddingModel() {
   const [name, model] = parse(

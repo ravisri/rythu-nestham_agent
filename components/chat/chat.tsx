@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ChangeEvent } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
@@ -59,6 +59,12 @@ import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis"
 import { clearChat, loadChat, saveChat } from "@/lib/chat-history"
 import { compressImage } from "@/lib/image"
 import { MESSAGES, type Usage } from "@/lib/plans"
+import { useTeluguLexicon } from "@/hooks/use-telugu-lexicon"
+import {
+  convertLastWord,
+  suggest,
+  transliterateText,
+} from "@/lib/telugu-translit"
 import { HelpDialog } from "./help-dialog"
 import { ListeningCard } from "./listening-card"
 import { Actions, Sources } from "./message-extras"
@@ -78,10 +84,13 @@ const textOf = (message: UIMessage) =>
     .trim()
 
 // The model sometimes writes "... **పరిష్కారం:** - a - b **జాగ్రత్త:** ..." on
-// one line: start each section label on its own paragraph.
+// one line: start each section / option-group label on its own paragraph.
 const formatAnswer = (text: string) =>
   text
-    .replace(/[ \t]*(\*\*(?:సమస్య|పరిష్కారం|జాగ్రత్త):?\*\*:?)/g, "\n\n$1")
+    .replace(
+      /[ \t]*(\*\*(?:సమస్య|పరిష్కారం|జాగ్రత్త|సేంద్రీయ|సాగు పద్ధతులు|రసాయన)[^*\n]*\*\*:?)/g,
+      "\n\n$1"
+    )
     .trim()
 
 // Styles per rendered HTML tag inside the answer card.
@@ -153,6 +162,10 @@ function ChatInner({
   } = useSpeechSynthesis()
   const { setTheme, resolvedTheme } = useTheme()
   const [largeText, setLargeText] = useState(false)
+  // English letters -> Telugu while typing (mirchi -> మిర్చి).
+  const [teluguTyping, setTeluguTyping] = useState(true)
+  // Real Telugu words, so loose spellings become proper words (vache -> వచ్చే).
+  const lexicon = useTeluguLexicon(teluguTyping) ?? undefined
   const [notice, setNotice] = useState<string | null>(null)
 
   const busy = status === "submitted" || status === "streaming"
@@ -160,6 +173,7 @@ function ChatInner({
   useEffect(() => {
     try {
       setLargeText(localStorage.getItem("textSize") === "large")
+      setTeluguTyping(localStorage.getItem("teluguTyping") !== "off")
     } catch {}
   }, [])
 
@@ -207,10 +221,46 @@ function ChatInner({
         url: await compressImage(f.url),
       }))
     )
+    // The last word may have been typed without a space after it.
+    const typed = teluguTyping
+      ? transliterateText(text.trim(), lexicon)
+      : text.trim()
     await sendMessage({
-      text: text.trim() || IMAGE_ONLY_TEXT,
+      text: typed || IMAGE_ONLY_TEXT,
       files: compressed,
     })
+  }
+
+  // Convert the word before a space / Enter / punctuation the user just typed.
+  function handleTyping(e: ChangeEvent<HTMLTextAreaElement>) {
+    if (!teluguTyping) return
+    const textarea = e.currentTarget
+    const result = convertLastWord(
+      textarea.value,
+      textarea.selectionStart ?? textarea.value.length,
+      lexicon
+    )
+    if (!result) return
+    controller.textInput.setInput(result.value)
+    requestAnimationFrame(() =>
+      textarea.setSelectionRange(result.caret, result.caret)
+    )
+  }
+
+  // Word being typed at the end of the box -> Telugu choices to tap.
+  const typing = teluguTyping
+    ? controller.textInput.value.match(/([A-Za-z]+)$/)?.[1]
+    : undefined
+  const choices = typing ? suggest(typing, lexicon) : []
+
+  function pickChoice(word: string) {
+    const value = controller.textInput.value
+    controller.textInput.setInput(`${value.slice(0, -typing!.length)}${word} `)
+  }
+
+  function toggleTeluguTyping() {
+    setTeluguTyping(!teluguTyping)
+    remember("teluguTyping", teluguTyping ? "off" : "on")
   }
 
   const mic = useSpeechRecognition({
@@ -484,10 +534,37 @@ function ChatInner({
               ))}
             </PromptInputHeader>
           )}
+          {choices.length > 0 && (
+            <PromptInputHeader className="flex-wrap gap-1.5">
+              {choices.map((word, i) => (
+                <Button
+                  key={word}
+                  type="button"
+                  size="sm"
+                  variant={i === 0 ? "default" : "secondary"}
+                  className="h-9 rounded-full px-3 text-base"
+                  // Keep the keyboard open: don't move focus off the text box.
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => pickChoice(word)}
+                >
+                  {word}
+                </Button>
+              ))}
+            </PromptInputHeader>
+          )}
           <PromptInputTextarea
-            placeholder="తెలుగులో టైప్ చేయండి…"
+            placeholder={
+              teluguTyping
+                ? "ఇంగ్లీష్‌లో టైప్ చేయండి (mirchi → మిర్చి)"
+                : "తెలుగులో టైప్ చేయండి…"
+            }
             className={`min-h-14 ${bodySize}`}
             disabled={busy}
+            onChange={handleTyping}
+            // Phone keyboards would capitalise / "correct" the English letters.
+            autoCapitalize={teluguTyping ? "none" : undefined}
+            autoCorrect={teluguTyping ? "off" : undefined}
+            spellCheck={teluguTyping ? false : undefined}
           />
           <PromptInputFooter>
             <PromptInputTools className="gap-2">
@@ -500,6 +577,19 @@ function ChatInner({
               >
                 <CameraIcon className="size-6" />
                 <span>ఫోటో</span>
+              </PromptInputButton>
+              <PromptInputButton
+                variant={teluguTyping ? "default" : "secondary"}
+                size="sm"
+                className="h-14 w-20 flex-col gap-1 rounded-xl text-sm"
+                aria-pressed={teluguTyping}
+                aria-label="ఇంగ్లీష్ అక్షరాలను తెలుగుగా మార్చు"
+                onClick={toggleTeluguTyping}
+              >
+                <span className="text-xl leading-none font-semibold">
+                  {teluguTyping ? "అ" : "A"}
+                </span>
+                <span>{teluguTyping ? "తెలుగు" : "English"}</span>
               </PromptInputButton>
               {mic.supported && (
                 <PromptInputButton

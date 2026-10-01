@@ -61,6 +61,40 @@ export async function visionOcr(pdf: Uint8Array, pageCount: number): Promise<str
     .join("\n")
 }
 
+// OCR one image (jpg/png/webp) with Vision's images:annotate.
+export async function visionImageOcr(image: Uint8Array): Promise<string> {
+  const key = process.env.GOOGLE_VISION_API_KEY
+  if (!key) throw new VisionError("GOOGLE_VISION_API_KEY is not set", false)
+
+  const res = await fetch(
+    `https://vision.googleapis.com/v1/images:annotate?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: [
+          {
+            image: { content: Buffer.from(image).toString("base64") },
+            features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
+            imageContext: { languageHints: ["te", "en"] },
+          },
+        ],
+      }),
+    }
+  )
+  const body = (await res.json()) as {
+    responses?: { fullTextAnnotation?: { text?: string }; error?: { message: string } }[]
+    error?: { message: string }
+  }
+  if (!res.ok || body.error) {
+    const message = body.error?.message ?? `Vision HTTP ${res.status}`
+    throw new VisionError(message, res.status === 429 || res.status >= 500)
+  }
+  const page = body.responses?.[0]
+  if (page?.error) throw new VisionError(page.error.message, false)
+  return page?.fullTextAnnotation?.text ?? ""
+}
+
 export const visionEnabled = () =>
   (process.env.OCR_ENGINE ??
     (process.env.GOOGLE_VISION_API_KEY ? "vision" : "llm")) === "vision"

@@ -1,11 +1,14 @@
 import {
   convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   stepCountIs,
   streamText,
   tool,
   type UIMessage,
 } from "ai"
 import { z } from "zod"
+import { isImproper, looksAgricultural } from "@/lib/agri-topic"
 import { chatModel, reasoningOptions } from "@/lib/ai"
 import { getCurrentUser, renewSession } from "@/lib/auth"
 import { creditCost, MESSAGES, planStatus } from "@/lib/plans"
@@ -17,13 +20,18 @@ import { searchKnowledge } from "@/lib/rag"
 export const maxDuration = 30
 
 const SYSTEM_PROMPT = `You are Rythu Nestham, a crop advisor for farmers in Telangana and Andhra Pradesh.
-Reply ONLY in simple, short Telugu (max 6 short sentences). It is read aloud.
+Reply ONLY in simple Telugu with short sentences. It is read aloud.
 Answer format (each label on its own line, each bullet on a new line):
-**సమస్య:** one sentence.
+**సమస్య:** 1-2 sentences; name every likely cause the reference mentions.
 **పరిష్కారం:**
-- bullet 1
-- bullet 2 (max 3)
+**సేంద్రీయ / తక్కువ ఖర్చు:**
+- 1-2 bullets
+**సాగు పద్ధతులు:**
+- 1-2 bullets
+**రసాయన (అవసరమైతే మాత్రమే):**
+- 1-2 bullets, each with the dose from the reference
 **జాగ్రత్త:** one sentence.
+Combine useful points from ALL reference items, not just the first. Include only the groups the reference supports (skip a group if it has nothing); max 7 bullets in total.
 (If you need more details, just ask one short question instead.)
 1. Identify the crop and problem from the text or photo. If unclear, ask ONE short Telugu follow-up question instead of guessing.`
 
@@ -31,8 +39,9 @@ const SEARCH_RULE = `2. For a photo, if the reference below does not cover the p
 
 const REFERENCE_RULE = `2. For any disease, pest, nutrient, pesticide or dose question, use the reference text below (ANGRAU/ICAR guides).`
 
-const ANSWER_RULES = `3. Answer from the reference / search text only. Prefer low-cost, locally available or organic options (neem oil, Trichoderma, pheromone traps, cultural practices); suggest a chemical only if needed, with the dose from the text. If nothing useful is there, give only general safe advice with no doses and tell the farmer to contact the local Rythu Bharosa Kendram / KVK.
-4. Never suggest banned or dangerous pesticides (${BANNED_PROMPT_LIST}). Never invent doses.`
+const ANSWER_RULES = `3. Answer from the reference / search text only. Prefer low-cost, locally available or organic options (neem oil, Trichoderma, pheromone traps, cultural practices); suggest a chemical only if needed, with the dose from the text. If nothing relevant is there (after any search), reply exactly: "${MESSAGES.notAvailable}"
+4. If the question is not about farming, crops, livestock or rural farm life, reply exactly: "${MESSAGES.notAgri}"
+5. Never suggest banned or dangerous pesticides (${BANNED_PROMPT_LIST}). Never invent doses.`
 
 type Results = Awaited<ReturnType<typeof searchKnowledge>>["results"]
 
@@ -116,6 +125,20 @@ const reply = (status: number, message: string) =>
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   })
 
+// A fixed Telugu answer shown as a normal chat reply (no model call).
+function quickReply(text: string, left: number) {
+  const stream = createUIMessageStream({
+    execute: ({ writer }) => {
+      writer.write({ type: "start", messageMetadata: { left } })
+      writer.write({ type: "text-start", id: "quick" })
+      writer.write({ type: "text-delta", id: "quick", delta: text })
+      writer.write({ type: "text-end", id: "quick" })
+      writer.write({ type: "finish" })
+    },
+  })
+  return createUIMessageStreamResponse({ stream })
+}
+
 const LIMIT_MESSAGE = {
   daily: MESSAGES.dailyLimit,
   period: MESSAGES.periodLimit,
@@ -141,20 +164,30 @@ export async function POST(req: Request) {
   const question = textOf(last)
   const hasImage = last.parts.some((p) => p.type === "file")
 
+  await renewSession()
+
+  // Off-topic / improper text questions and questions we have no data for are
+  // answered here: no LLM call and no credit used. Photos always go to the LLM.
+  // (Embedding similarity alone can't spot off-topic Telugu, so check words first.)
+  const query = question ? searchQuery(window, question) : ""
+  if (!hasImage && (isImproper(question) || !looksAgricultural(query))) {
+    return quickReply(MESSAGES.notAgri, (await usageSummary(user)).left)
+  }
+  const search = query
+    ? await searchKnowledge(query)
+    : { results: [], unavailable: false }
+  const { results } = search
+  if (!hasImage && results.length === 0 && !search.unavailable) {
+    return quickReply(MESSAGES.notAvailable, (await usageSummary(user)).left)
+  }
+
   const cost = creditCost(hasImage)
   const charged = await chargeCredits(user, cost)
   if (charged !== "ok") {
     const trial = user.plan === "trial" && charged === "period"
     return reply(429, trial ? MESSAGES.trialLimit : LIMIT_MESSAGE[charged])
   }
-  await renewSession()
-
-  const [{ results }, usage] = await Promise.all([
-    question
-      ? searchKnowledge(searchQuery(window, question))
-      : Promise.resolve({ results: [] }),
-    usageSummary(user),
-  ])
+  const usage = await usageSummary(user)
 
   const model = chatModel()
   const result = streamText({
@@ -166,10 +199,13 @@ export async function POST(req: Request) {
     maxOutputTokens: 1500,
     // Text answers come from the reference; only photos need some thinking.
     providerOptions: reasoningOptions(model.modelId, hasImage ? "low" : "none"),
-    onFinish: ({ totalUsage }) =>
+    onFinish: ({ text, totalUsage }) =>
       recordUsage(
         user.id,
-        0,
+        // "Not available" / "ask about farming" is not a real answer: refund it.
+        [MESSAGES.notAvailable, MESSAGES.notAgri].some((m) => text.includes(m))
+          ? -cost
+          : 0,
         totalUsage.inputTokens ?? 0,
         totalUsage.outputTokens ?? 0
       ),
