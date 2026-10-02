@@ -20,7 +20,7 @@ import {
   usageSummary,
 } from "@/lib/usage"
 import { BANNED_PROMPT_LIST } from "@/lib/banned-pesticides"
-import { toCrop } from "@/lib/crops"
+import { cropFromText, toCrop } from "@/lib/crops"
 import { searchKnowledge } from "@/lib/rag"
 
 export const maxDuration = 30
@@ -31,13 +31,16 @@ Answer format (each label on its own line, each bullet on a new line):
 **సమస్య:** 1-2 sentences; name every likely cause the reference mentions.
 **పరిష్కారం:**
 **సేంద్రీయ / తక్కువ ఖర్చు:**
-- 1-2 bullets
+- bullets
+**జీవ నియంత్రణ:**
+- bullets (Trichoderma, Pseudomonas, NPV, parasitoids, ...)
 **సాగు పద్ధతులు:**
-- 1-2 bullets
+- bullets
 **రసాయన (అవసరమైతే మాత్రమే):**
-- 1-2 bullets, each with the dose from the reference
+- bullets, each with the dose from the reference
 **జాగ్రత్త:** one sentence.
-Combine useful points from ALL reference items, not just the first. Include only the groups the reference supports (skip a group if it has nothing); max 7 bullets in total.
+Read ALL reference items and list EVERY distinct solution they give (each method/product once, merge duplicates), so the farmer sees all options. Skip a group with nothing in the reference. One short line per bullet, at most 4 bullets per group.
+Use only products and doses from the reference for this crop; never mix in advice meant for a different crop.
 (If you need more details, just ask one short question instead.)
 1. Identify the crop and problem from the text or photo. If unclear, ask ONE short Telugu follow-up question instead of guessing.`
 
@@ -204,7 +207,7 @@ export async function POST(req: Request) {
     return quickReply(MESSAGES.notAgri, (await usageSummary(user)).left)
   }
   const search = query
-    ? await searchKnowledge(query)
+    ? await searchKnowledge(query, hasImage ? undefined : cropFromText(query))
     : { results: [], unavailable: false }
   const { results } = search
   if (!hasImage && results.length === 0 && !search.unavailable) {
@@ -227,7 +230,7 @@ export async function POST(req: Request) {
     messages: await convertToModelMessages(window, { tools }),
     tools: hasImage ? tools : undefined,
     stopWhen: stepCountIs(3),
-    maxOutputTokens: 1500,
+    maxOutputTokens: 2000, // complete answers (all solution groups) aren't cut off
     // Text answers come from the reference; only photos need some thinking.
     // Photos: fixed medium resolution (~258 tokens) instead of tiling (Gemini only).
     providerOptions: withMediaResolution(

@@ -67,3 +67,46 @@ export function toCrop(name: string | undefined): Crop | undefined {
   const slug = Object.keys(CROPS).find((c) => c.replace(/-/g, "") === key)
   return (slug as Crop | undefined) ?? ALIASES[key]
 }
+
+// Group slugs: never picked from a question (too broad to filter on).
+const GROUPS = new Set<Crop>(["general", "pulses", "oilseeds", "trees"])
+
+// Common spellings farmers use beside the CROPS names.
+const TELUGU_ALIASES: Record<string, Crop> = {
+  పత్తి: "cotton",
+  మిర్చి: "chilli",
+  మిరప: "chilli",
+  టమాటో: "tomato",
+  టొమాటో: "tomato",
+  కందు: "redgram",
+  పెసలు: "greengram",
+  పెసర్లు: "greengram",
+  మినుములు: "blackgram",
+  మక్క: "maize",
+  చెరుకు: "sugarcane",
+  పొద్దుతిరుగుడు: "sunflower",
+  సోయా: "soybean",
+}
+
+// Longest first, so వేరుశనగ wins over శనగ and మొక్కజొన్న over జొన్న.
+const STEMS = [
+  ...Object.entries(CROPS)
+    .filter(([slug]) => !GROUPS.has(slug as Crop))
+    .map(([slug, te]) => [te, slug as Crop] as const),
+  ...Object.entries(TELUGU_ALIASES),
+].sort((a, b) => b[0].length - a[0].length)
+
+// The one crop a Telugu question is about, or undefined (none / several).
+// Stems match only at a word start, so "ఫిబ్రవరి" is not వరి.
+export function cropFromText(text: string): Crop | undefined {
+  let rest = ` ${text}`
+  const found = new Set<Crop>()
+  for (const [stem, crop] of STEMS) {
+    const re = new RegExp(`(^|[^\u0C00-\u0C7F])${stem}`, "g")
+    if (re.test(rest)) {
+      found.add(crop)
+      rest = rest.replace(re, "$1 ") // a shorter stem can't match it again
+    }
+  }
+  return found.size === 1 ? [...found][0] : undefined
+}
