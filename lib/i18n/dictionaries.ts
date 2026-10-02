@@ -20,7 +20,8 @@ export const te = {
     remove: "తొలగించు",
     switchTo: "English",
     language: "భాష / Language",
-    languageHint: "యాప్ అక్షరాలు మాత్రమే మారుతాయి. AI సమాధానాలు ఎప్పుడూ తెలుగులోనే.",
+    languageHint:
+      "యాప్ అక్షరాలు మాత్రమే మారుతాయి. AI సమాధానాలు ఎప్పుడూ తెలుగులోనే.",
     admin: "అడ్మిన్",
     farmer: "రైతు",
     users: "యూజర్లు",
@@ -67,8 +68,10 @@ export const te = {
       "ఈ ప్రశ్న ఈ రోజు ఇప్పటికే అడిగారు. వేరే వ్యవసాయ సమస్య ఉంటే అడగండి.",
     selectedPhoto: "ఎంచుకున్న ఫోటో",
     removePhoto: "ఫోటో తొలగించు",
-    placeholderTranslit: "ఇంగ్లీష్‌లో టైప్ చేయండి (mirchi → మిర్చి)",
-    placeholder: "తెలుగులో టైప్ చేయండి…",
+    placeholderTranslit:
+      "మీ పంట సమస్య అడగండి… ఉదా: mirchi akulu mudata (ఇంగ్లీష్ అక్షరాలతో)",
+    placeholder:
+      "మీ పంట సమస్య లేదా రక్షణ గురించి అడగండి… ఉదా: వరి ఆకులపై మచ్చలు, పత్తిలో పురుగుల నివారణ",
     photo: "ఫోటో",
     translitToggle: "ఇంగ్లీష్ అక్షరాలను తెలుగుగా మార్చు",
     stop: "ఆపండి",
@@ -81,6 +84,23 @@ export const te = {
     listening: "చెప్పండి, వింటున్నాను…",
     disclaimer:
       "AI సలహా మాత్రమే. మందులు వాడే ముందు స్థానిక వ్యవసాయ అధికారిని సంప్రదించండి.",
+  },
+  guest: {
+    badge: "అతిథి",
+    left: (n: number, total: number) => `ఉచిత ప్రశ్నలు: ${n}/${total}`,
+    banner: (total: number) =>
+      `లాగిన్ లేకుండా రోజుకు ${total} ప్రశ్నలు ఉచితం (1 ఫోటో)`,
+    bannerHint: "ఖాతా తెరిస్తే ఇంకా ఎక్కువ ప్రశ్నలు అడగవచ్చు.",
+    signup: "ఉచితంగా ఖాతా తెరవండి",
+    login: "లాగిన్",
+    cardTitle: "ఈరోజు ఉచిత ప్రశ్నలు అయిపోయాయి",
+    cardBody: "ఉచిత ఖాతా తెరిచి మీ పంట సమస్యలకు ఇంకా సలహాలు పొందండి.",
+    benefits: [
+      "రోజుకు ఎక్కువ ప్రశ్నలు",
+      "ఫోటోతో పంట తెగులు గుర్తింపు",
+      "మీ ప్లాన్, వాడకం ఒకే చోట",
+      "ANGRAU / ICAR శాస్త్రవేత్తల సలహాలు",
+    ],
   },
   welcome: {
     steps: [
@@ -126,7 +146,8 @@ export const te = {
     confirmPassword: "పాస్‌వర్డ్ మళ్లీ ఇవ్వండి",
     confirmNewPassword: "కొత్త పాస్‌వర్డ్ మళ్లీ ఇవ్వండి",
     yourCode: "మీ రికవరీ కోడ్",
-    codeHint: "ఈ కోడ్ రాసి పెట్టుకోండి. కొత్త ఫోన్‌లో పాస్‌వర్డ్ మర్చిపోతే ఇది అవసరం.",
+    codeHint:
+      "ఈ కోడ్ రాసి పెట్టుకోండి. కొత్త ఫోన్‌లో పాస్‌వర్డ్ మర్చిపోతే ఇది అవసరం.",
     codeSaved: "రాసుకున్నాను, కొనసాగించండి",
     continue: "కొనసాగించండి",
     account: "ఖాతా:",
@@ -176,7 +197,7 @@ export const te = {
     verifyFirst:
       "ముందుగా యూజర్ నిజమైన వ్యక్తేనా సరిచూడండి (ఉదా: రిజిస్టర్ ఫోన్‌కు కాల్ చేయండి).",
     codeHelp:
-      "కొత్త కోడ్ యూజర్‌కు చెప్పండి. యూజర్ లాగిన్ పేజీలో \"పాస్‌వర్డ్ మర్చిపోయారా?\" నొక్కి, ఈ కోడ్‌తో తమ కొత్త పాస్‌వర్డ్ పెట్టుకుంటారు. పాత కోడ్ పనిచేయదు.",
+      'కొత్త కోడ్ యూజర్‌కు చెప్పండి. యూజర్ లాగిన్ పేజీలో "పాస్‌వర్డ్ మర్చిపోయారా?" నొక్కి, ఈ కోడ్‌తో తమ కొత్త పాస్‌వర్డ్ పెట్టుకుంటారు. పాత కోడ్ పనిచేయదు.',
     issueCode: "కొత్త కోడ్ ఇవ్వండి",
     passwordHelp:
       "యూజర్ అన్ని ఫోన్‌ల నుండి లాగౌట్ అవుతారు. కొత్త రికవరీ కోడ్ కూడా వస్తుంది.",
@@ -206,7 +227,8 @@ export const te = {
     ocrHint:
       "PDF ఇంజెస్ట్ (npm run ingest) లో స్కాన్ పేజీలు చదవడానికి. PDF చదవగల google / openai / anthropic వాడండి.",
     keysTitle: "API కీలు",
-    keysHint: "కీలు ఎన్‌క్రిప్ట్ చేసి సేవ్ అవుతాయి. సేవ్ చేసిన కీ లేకపోతే .env కీ వాడతాం.",
+    keysHint:
+      "కీలు ఎన్‌క్రిప్ట్ చేసి సేవ్ అవుతాయి. సేవ్ చేసిన కీ లేకపోతే .env కీ వాడతాం.",
     embeddingTitle: "ఎంబెడింగ్ మోడల్",
     embeddingHint:
       "(.env లో మాత్రమే మార్చాలి). మారిస్తే మొత్తం డేటా మళ్లీ ఇంజెస్ట్ చేయాలి. దాని ప్రొవైడర్ కీ పైన ఇచ్చినదే వాడుతుంది.",
@@ -274,8 +296,10 @@ export const en: Dictionary = {
       "You already asked this question today. Ask me about any other farming problem.",
     selectedPhoto: "Selected photo",
     removePhoto: "Remove photo",
-    placeholderTranslit: "Type in English letters (mirchi → మిర్చి)",
-    placeholder: "Type in Telugu…",
+    placeholderTranslit:
+      "Ask your crop problem… e.g. mirchi akulu mudata (in English letters)",
+    placeholder:
+      "Ask about your crop problem or protection… e.g. spots on paddy leaves, controlling cotton pests",
     photo: "Photo",
     translitToggle: "Convert English letters to Telugu",
     stop: "Stop",
@@ -288,6 +312,23 @@ export const en: Dictionary = {
     listening: "Go ahead, I'm listening…",
     disclaimer:
       "AI advice only. Consult your local agriculture officer before using any pesticide.",
+  },
+  guest: {
+    badge: "Guest",
+    left: (n: number, total: number) => `Free questions: ${n}/${total}`,
+    banner: (total: number) =>
+      `${total} free questions a day without login (1 photo)`,
+    bannerHint: "Create an account to ask more.",
+    signup: "Create free account",
+    login: "Log in",
+    cardTitle: "Today's free questions are used up",
+    cardBody: "Create a free account to keep getting advice for your crops.",
+    benefits: [
+      "More questions every day",
+      "Crop disease check from photos",
+      "Your plan and usage in one place",
+      "ANGRAU / ICAR scientist advice",
+    ],
   },
   welcome: {
     steps: [
@@ -332,7 +373,8 @@ export const en: Dictionary = {
     confirmPassword: "Enter password again",
     confirmNewPassword: "Enter new password again",
     yourCode: "Your recovery code",
-    codeHint: "Write this code down. You need it if you forget your password on a new phone.",
+    codeHint:
+      "Write this code down. You need it if you forget your password on a new phone.",
     codeSaved: "I've written it down, continue",
     continue: "Continue",
     account: "Account:",
@@ -382,7 +424,7 @@ export const en: Dictionary = {
     verifyFirst:
       "First verify this is the real user (e.g. call their registered phone).",
     codeHelp:
-      "Tell the user the new code. On the login page they tap \"Forgot password?\" and set their own new password with this code. The old code stops working.",
+      'Tell the user the new code. On the login page they tap "Forgot password?" and set their own new password with this code. The old code stops working.',
     issueCode: "Issue new code",
     passwordHelp:
       "The user is logged out on all phones. A new recovery code is issued too.",
@@ -412,7 +454,8 @@ export const en: Dictionary = {
     ocrHint:
       "Reads scanned pages during PDF ingest (npm run ingest). Use a PDF-capable google / openai / anthropic model.",
     keysTitle: "API keys",
-    keysHint: "Keys are saved encrypted. Without a saved key, the .env key is used.",
+    keysHint:
+      "Keys are saved encrypted. Without a saved key, the .env key is used.",
     embeddingTitle: "Embedding model",
     embeddingHint:
       "(change in .env only). Changing it needs a full re-ingest. It uses its provider's key from above.",
@@ -441,11 +484,13 @@ const EN_MESSAGES: Record<string, string> = {
   "సరైన URL ఇవ్వండి": "Enter a valid URL",
   "compat కోసం Base URL ఇవ్వండి": "Enter a Base URL for compat",
   // login actions
-  "సమాచారం సరిగా లేదు. మళ్లీ ప్రయత్నించండి.": "Invalid details. Please try again.",
+  "సమాచారం సరిగా లేదు. మళ్లీ ప్రయత్నించండి.":
+    "Invalid details. Please try again.",
   "యూజర్‌నేమ్/ఫోన్ లేదా పాస్‌వర్డ్ తప్పు.": "Wrong username/phone or password.",
   "సమస్య వచ్చింది. కొద్దిసేపటి తర్వాత ప్రయత్నించండి.":
     "Something went wrong. Please try again later.",
-  "ఈ ఫోన్ నంబర్‌తో ఇప్పటికే ఖాతా ఉంది.": "An account with this phone number already exists.",
+  "ఈ ఫోన్ నంబర్‌తో ఇప్పటికే ఖాతా ఉంది.":
+    "An account with this phone number already exists.",
   "ఈ యూజర్‌నేమ్ ఇప్పటికే ఉంది. వేరేది ఎంచుకోండి.":
     "This username is taken. Please choose another.",
   "ఈ యూజర్‌నేమ్/ఫోన్‌తో ఖాతా లేదు.": "No account with this username/phone.",
@@ -465,7 +510,8 @@ const EN_MESSAGES: Record<string, string> = {
     "Model name is wrong or not available for this key.",
   "కీ పని చేస్తోంది, కానీ కోటా / రేట్ పరిమితి దాటింది.":
     "The key works, but the quota / rate limit is exceeded.",
-  "Base URL చేరుకోలేకపోయాం. URL సరిచూడండి.": "Couldn't reach the Base URL. Check it.",
+  "Base URL చేరుకోలేకపోయాం. URL సరిచూడండి.":
+    "Couldn't reach the Base URL. Check it.",
   "కనెక్ట్ కాలేదు. ప్రొవైడర్, మోడల్, కీ సరిచూడండి.":
     "Couldn't connect. Check provider, model and key.",
 }
@@ -476,7 +522,8 @@ export function translateMessage(message: string, locale: Locale): string {
   if (exact) return exact
   // "చాలా సార్లు తప్పు పాస్‌వర్డ్. 15 నిమిషాల తర్వాత ప్రయత్నించండి."
   const locked = message.match(/^చాలా సార్లు తప్పు పాస్‌వర్డ్\. (\d+) నిమిషాల/)
-  if (locked) return `Too many wrong passwords. Try again after ${locked[1]} minutes.`
+  if (locked)
+    return `Too many wrong passwords. Try again after ${locked[1]} minutes.`
   return message
 }
 

@@ -6,12 +6,14 @@ import {
   BotIcon,
   CircleHelpIcon,
   LanguagesIcon,
+  LogInIcon,
   LogOutIcon,
   MoonIcon,
   ShieldIcon,
   SunIcon,
   TypeIcon,
   UserIcon,
+  UserPlusIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -32,13 +34,15 @@ import { HelpDialog } from "./help-dialog"
 const ITEM = "h-11 text-base"
 
 // Header avatar menu: profile, help, display settings, language, logout
-// (admins also get the admin pages).
+// (admins also get the admin pages). Guests get sign-up / login instead.
 export function ProfileMenu({
   username,
   isAdmin,
   largeText,
   onToggleTextSize,
+  guest = false,
 }: {
+  guest?: boolean
   username: string
   isAdmin: boolean
   largeText?: boolean
@@ -61,21 +65,49 @@ export function ProfileMenu({
             aria-label={t.common.menu}
           >
             <Avatar className="size-10">
-              <AvatarFallback className="bg-primary text-base font-semibold text-primary-foreground uppercase">
-                {username.charAt(0)}
+              <AvatarFallback
+                className={
+                  guest
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-primary text-base font-semibold text-primary-foreground uppercase"
+                }
+              >
+                {guest ? <UserIcon className="size-5" /> : username.charAt(0)}
               </AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-56">
-          <DropdownMenuLabel className="truncate">{username}</DropdownMenuLabel>
+          <DropdownMenuLabel className="truncate">
+            {guest ? t.guest.badge : username}
+          </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild className={ITEM}>
-            <Link href="/profile">
-              <UserIcon />
-              {t.common.myProfile}
-            </Link>
-          </DropdownMenuItem>
+          {guest ? (
+            <>
+              <DropdownMenuItem
+                asChild
+                className={`${ITEM} font-semibold text-primary`}
+              >
+                <Link href="/login?tab=signup">
+                  <UserPlusIcon className="text-primary" />
+                  {t.guest.signup}
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className={ITEM}>
+                <Link href="/login">
+                  <LogInIcon />
+                  {t.guest.login}
+                </Link>
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <DropdownMenuItem asChild className={ITEM}>
+              <Link href="/profile">
+                <UserIcon />
+                {t.common.myProfile}
+              </Link>
+            </DropdownMenuItem>
+          )}
           {isAdmin && (
             <>
               <DropdownMenuItem asChild className={ITEM}>
@@ -121,16 +153,20 @@ export function ProfileMenu({
             <LanguagesIcon />
             {t.common.switchTo}
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            className={ITEM}
-            disabled={loggingOut}
-            onSelect={() => startLogout(() => logout())}
-          >
-            <LogOutIcon />
-            {t.common.logout}
-          </DropdownMenuItem>
+          {!guest && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                className={ITEM}
+                disabled={loggingOut}
+                onSelect={() => startLogout(() => logout())}
+              >
+                <LogOutIcon />
+                {t.common.logout}
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />

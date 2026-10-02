@@ -11,6 +11,10 @@ export const PLANS = {
 
 export type Plan = keyof typeof PLANS
 
+// Not logged in: questions per IST day (photos count as questions), plus a
+// per-IP cap so clearing cookies doesn't give unlimited questions.
+export const GUEST = { daily: 5, photos: 1, ipDaily: 15 } as const
+
 export type PlanUser = {
   plan: Plan
   trial_ends_at: string
@@ -59,19 +63,21 @@ export function planStatus(user: PlanUser, now = Date.now()): PlanStatus {
 // Server error texts (Telugu, read aloud). The client matches SESSION_ENDED.
 export const MESSAGES = {
   sessionEnded: "మీ ఖాతా వేరే ఫోన్‌లో లాగిన్ అయింది. మళ్లీ లాగిన్ అవ్వండి.",
-  trialOver:
-    "ఉచిత ట్రయల్ ముగిసింది. ప్రో ప్లాన్ కోసం అడ్మిన్‌ను సంప్రదించండి.",
+  trialOver: "ఉచిత ట్రయల్ ముగిసింది. ప్రో ప్లాన్ కోసం అడ్మిన్‌ను సంప్రదించండి.",
   expired: "మీ ప్లాన్ గడువు ముగిసింది. అడ్మిన్‌ను సంప్రదించండి.",
   dailyLimit: "ఈరోజు ప్రశ్నల పరిమితి అయిపోయింది. రేపు మళ్లీ అడగండి.",
   periodLimit: "ఈ నెల ప్రశ్నల పరిమితి అయిపోయింది. అడ్మిన్‌ను సంప్రదించండి.",
-  notAgri:
-    "దయచేసి వ్యవసాయం, పంటలకు సంబంధించిన ప్రశ్నను స్పష్టంగా అడగండి.",
+  notAgri: "దయచేసి వ్యవసాయం, పంటలకు సంబంధించిన ప్రశ్నను స్పష్టంగా అడగండి.",
   notAvailable:
     "ప్రస్తుతం ఈ సమాచారం యాప్‌లో అందుబాటులో లేదు. అడ్మిన్ త్వరలోనే దీన్ని చేరుస్తారు. అప్పటివరకు స్థానిక రైతు భరోసా కేంద్రాన్ని సంప్రదించండి.",
   photoLimit:
     "ఈరోజు ఫోటో పరిమితి అయిపోయింది. రేపు మళ్లీ ఫోటో పంపండి. ఇప్పుడు ప్రశ్నను టైప్ చేయండి లేదా మాట్లాడండి.",
   notAgriImage:
     "దయచేసి వ్యవసాయానికి సంబంధించిన ఫోటోలు మాత్రమే పంపండి (పంట, ఆకు, కాయ, పురుగు, నేల).",
+  guestLimit:
+    "ఈరోజు ఉచిత ప్రశ్నలు అయిపోయాయి. ఉచితంగా ఖాతా తెరిచి మరిన్ని ప్రశ్నలు అడగండి.",
+  guestPhotoLimit:
+    "అతిథిగా రోజుకు ఒక ఫోటో మాత్రమే. ఉచిత ఖాతా తెరిస్తే ఎక్కువ ఫోటోలు పంపవచ్చు.",
   trialLimit:
     "ఉచిత ట్రయల్ ప్రశ్నలు అయిపోయాయి. ప్రో ప్లాన్ కోసం అడ్మిన్‌ను సంప్రదించండి.",
 } as const

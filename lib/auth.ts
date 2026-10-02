@@ -151,3 +151,35 @@ export async function endSession() {
   }
   store.delete(SESSION_COOKIE)
 }
+
+// Session cookie present (valid or not): an ended session is not a guest.
+export async function hasSessionCookie() {
+  return (await cookies()).has(SESSION_COOKIE)
+}
+
+const GUEST_COOKIE = "rn_guest"
+
+// Guest (not logged in) id from its cookie; `create` sets one (Route Handlers only).
+export async function getGuestId(create = false): Promise<string | undefined> {
+  const store = await cookies()
+  const id = store.get(GUEST_COOKIE)?.value
+  if (id || !create) return id
+  const fresh = randomBytes(16).toString("base64url")
+  store.set(GUEST_COOKIE, fresh, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+  })
+  return fresh
+}
+
+// Hashed client IP: caps guests who clear their cookies.
+export function ipKey(req: Request): string {
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown"
+  return sha256(ip)
+}

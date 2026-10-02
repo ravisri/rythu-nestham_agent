@@ -66,13 +66,14 @@ import {
   wasAskedToday,
 } from "@/lib/chat-history"
 import { compressImage } from "@/lib/image"
-import { MESSAGES, type Usage } from "@/lib/plans"
+import { GUEST, MESSAGES, type Usage } from "@/lib/plans"
 import { useTeluguLexicon } from "@/hooks/use-telugu-lexicon"
 import {
   convertLastWord,
   suggest,
   transliterateText,
 } from "@/lib/telugu-translit"
+import { GuestSignupCard } from "./guest-signup-card"
 import { ListeningCard } from "./listening-card"
 import { Actions, Sources } from "./message-extras"
 import { Welcome } from "./welcome"
@@ -162,6 +163,8 @@ function progressLabel(last: UIMessage | undefined, t: Dictionary): string {
 }
 
 type ChatProps = {
+  // Not logged in: a few free questions a day, then a sign-up card.
+  guest?: boolean
   userId: string
   username: string
   isAdmin: boolean
@@ -169,6 +172,7 @@ type ChatProps = {
 }
 
 function ChatInner({
+  guest = false,
   userId,
   username,
   isAdmin,
@@ -210,6 +214,9 @@ function ChatInner({
   const [info, setInfo] = useState<string | null>(null)
 
   const busy = status === "submitted" || status === "streaming"
+  // Guest used today's free questions: show the sign-up card, block input.
+  const guestOut =
+    guest && (left === 0 || error?.message === MESSAGES.guestLimit)
 
   useEffect(() => {
     try {
@@ -242,6 +249,7 @@ function ChatInner({
       MESSAGES.dailyLimit,
       MESSAGES.periodLimit,
       MESSAGES.trialLimit,
+      MESSAGES.guestLimit,
     ]
     if (error && limits.includes(error.message)) setLeft(0)
     if (error?.message === MESSAGES.sessionEnded) {
@@ -251,7 +259,7 @@ function ChatInner({
   }, [error, router])
 
   async function send(text: string, files: FileInput[] = []) {
-    if (busy || (!text.trim() && files.length === 0)) return
+    if (busy || guestOut || (!text.trim() && files.length === 0)) return
     stopSpeech()
     setNotice(null)
     setInfo(null)
@@ -379,7 +387,7 @@ function ChatInner({
       ? error.message
       : t.chat.genericError
     : null
-  const alertText = notice ?? micNotice ?? errorText
+  const alertText = notice ?? micNotice ?? (guestOut ? null : errorText)
   const bodySize = largeText ? "text-xl" : "text-base"
 
   return (
@@ -392,7 +400,17 @@ function ChatInner({
           <h1 className="text-lg leading-tight font-bold tracking-tight">
             {t.common.appName}
           </h1>
-          {usage.status === "active" ? (
+          {guest ? (
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+              <Badge variant="outline" className="shrink-0">
+                {t.guest.badge}
+              </Badge>
+              <CoinsIcon className="size-3.5 shrink-0" />
+              <span className="truncate">
+                {t.guest.left(left, GUEST.daily)}
+              </span>
+            </div>
+          ) : usage.status === "active" ? (
             <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
               <Badge
                 variant="secondary"
@@ -417,6 +435,7 @@ function ChatInner({
             isAdmin={isAdmin}
             largeText={largeText}
             onToggleTextSize={toggleTextSize}
+            guest={guest}
           />
           {messages.length > 0 && (
             <Dialog>
@@ -470,6 +489,7 @@ function ChatInner({
                 onMic={mic.start}
                 onCamera={() => attachments.openFileDialog()}
                 onPick={(text) => void send(text)}
+                guestLeft={guest ? left : undefined}
               />
             </ConversationEmptyState>
           ) : (
@@ -562,6 +582,7 @@ function ChatInner({
             <AlertDescription>{alertText}</AlertDescription>
           </Alert>
         )}
+        {guestOut && <GuestSignupCard />}
         {mic.listening && (
           <ListeningCard
             transcript={controller.textInput.value}
@@ -621,7 +642,7 @@ function ChatInner({
               teluguTyping ? t.chat.placeholderTranslit : t.chat.placeholder
             }
             className={`min-h-14 ${bodySize}`}
-            disabled={busy}
+            disabled={busy || guestOut}
             onChange={handleTyping}
             // Phone keyboards would capitalise / "correct" the English letters.
             autoCapitalize={teluguTyping ? "none" : undefined}
@@ -633,22 +654,22 @@ function ChatInner({
               <PromptInputButton
                 variant="secondary"
                 size="sm"
-                className="h-14 w-20 flex-col gap-1 rounded-xl text-sm"
-                disabled={busy}
+                className="h-14 w-20 flex-col gap-0.5 rounded-xl text-sm"
+                disabled={busy || guestOut}
                 onClick={() => attachments.openFileDialog()}
               >
-                <CameraIcon className="size-6" />
+                <CameraIcon className="size-5" />
                 <span>{t.chat.photo}</span>
               </PromptInputButton>
               <PromptInputButton
                 variant={teluguTyping ? "default" : "secondary"}
                 size="sm"
-                className="h-14 w-20 flex-col gap-1 rounded-xl text-sm"
+                className="h-14 w-20 flex-col gap-0 rounded-xl text-sm"
                 aria-pressed={teluguTyping}
                 aria-label={t.chat.translitToggle}
                 onClick={toggleTeluguTyping}
               >
-                <span className="text-xl leading-none font-semibold">
+                <span className="text-lg leading-none font-semibold">
                   {teluguTyping ? "అ" : "A"}
                 </span>
                 <span>{teluguTyping ? "తెలుగు" : "English"}</span>
@@ -657,11 +678,11 @@ function ChatInner({
                 <PromptInputButton
                   variant={mic.listening ? "destructive" : "secondary"}
                   size="sm"
-                  className="h-14 w-20 flex-col gap-1 rounded-xl text-sm"
-                  disabled={busy}
+                  className="h-14 w-20 flex-col gap-0.5 rounded-xl text-sm"
+                  disabled={busy || guestOut}
                   onClick={mic.listening ? mic.stop : mic.start}
                 >
-                  <MicIcon className="size-6" />
+                  <MicIcon className="size-5" />
                   <span>{mic.listening ? t.chat.stop : t.chat.speak}</span>
                 </PromptInputButton>
               )}

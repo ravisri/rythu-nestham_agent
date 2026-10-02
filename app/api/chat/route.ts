@@ -10,7 +10,15 @@ import {
 import { z } from "zod"
 import { isImproper, looksAgricultural } from "@/lib/agri-topic"
 import { chatModel, reasoningOptions } from "@/lib/ai"
-import { getCurrentUser, renewSession } from "@/lib/auth"
+import {
+  getCurrentUser,
+  getGuestId,
+  hasSessionCookie,
+  ipKey,
+  renewSession,
+  type AppUser,
+} from "@/lib/auth"
+import { chargeGuest, guestLeft, refundGuest } from "@/lib/guest"
 import { creditCost, MESSAGES, planStatus } from "@/lib/plans"
 import {
   chargeCredits,
@@ -114,15 +122,17 @@ function textOf(message: UIMessage): string {
 // Short follow-ups ("ఎంత మోతాదు?") get the previous question as context.
 function searchQuery(window: UIMessage[], question: string): string {
   if (question.length >= 60) return question
-  const previous = window
-    .slice(0, -1)
-    .findLast((m) => m.role === "user")
+  const previous = window.slice(0, -1).findLast((m) => m.role === "user")
   return [previous && textOf(previous), question].filter(Boolean).join(" ")
 }
 
 function friendlyError(error: unknown): string {
   const text = String(error)
-  if (/429|503|529|quota|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand|rate|overloaded/i.test(text)) {
+  if (
+    /429|503|529|quota|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand|rate|overloaded/i.test(
+      text
+    )
+  ) {
     return "ప్రస్తుతం చాలా మంది వాడుతున్నారు. కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి."
   }
   return "క్షమించండి, సమస్య వచ్చింది. దయచేసి మళ్లీ ప్రయత్నించండి."
@@ -149,7 +159,11 @@ function quickReply(text: string, left: number) {
   return createUIMessageStreamResponse({ stream })
 }
 
-const NO_ANSWER = [MESSAGES.notAvailable, MESSAGES.notAgri, MESSAGES.notAgriImage]
+const NO_ANSWER = [
+  MESSAGES.notAvailable,
+  MESSAGES.notAgri,
+  MESSAGES.notAgriImage,
+]
 
 function withMediaResolution(
   options: ReturnType<typeof reasoningOptions>,
@@ -167,13 +181,89 @@ const LIMIT_MESSAGE = {
   period: MESSAGES.periodLimit,
 } as const
 
+// Charging differs for users (credits + plan photo limit) and guests (free
+// daily questions); everything else in POST is the same for both.
+type Meter = {
+  left: () => Promise<number>
+  // null = charged; otherwise the limit reply to return.
+  charge: (hasImage: boolean) => Promise<Response | null>
+  // After the answer: refund a non-answer, record tokens.
+  settle: (
+    noAnswer: boolean,
+    tokensIn: number,
+    tokensOut: number
+  ) => Promise<void>
+  // The model failed: give everything back.
+  refund: () => Promise<void>
+}
+
+function userMeter(user: AppUser): Meter {
+  let cost = 0
+  let photo = false
+  return {
+    left: async () => (await usageSummary(user)).left,
+    charge: async (hasImage) => {
+      // Photos cost the most tokens: limited per plan per day.
+      if (hasImage && !(await chargePhoto(user))) {
+        return reply(429, MESSAGES.photoLimit)
+      }
+      photo = hasImage
+      cost = creditCost(hasImage)
+      const charged = await chargeCredits(user, cost)
+      if (charged === "ok") return null
+      if (photo) await refundPhoto(user.id)
+      const trial = user.plan === "trial" && charged === "period"
+      return reply(429, trial ? MESSAGES.trialLimit : LIMIT_MESSAGE[charged])
+    },
+    settle: async (noAnswer, tokensIn, tokensOut) => {
+      if (noAnswer && photo) await refundPhoto(user.id)
+      await recordUsage(user.id, noAnswer ? -cost : 0, tokensIn, tokensOut)
+    },
+    refund: async () => {
+      if (photo) await refundPhoto(user.id)
+      await recordUsage(user.id, -cost)
+    },
+  }
+}
+
+function guestMeter(guestId: string, ip: string): Meter {
+  let photo = false
+  return {
+    left: () => guestLeft(guestId),
+    charge: async (hasImage) => {
+      const charged = await chargeGuest(guestId, ip, hasImage)
+      if (charged === "ok") {
+        photo = hasImage
+        return null
+      }
+      return reply(
+        429,
+        charged === "photo" ? MESSAGES.guestPhotoLimit : MESSAGES.guestLimit
+      )
+    },
+    settle: async (noAnswer) => {
+      if (noAnswer) await refundGuest(guestId, ip, photo)
+    },
+    refund: () => refundGuest(guestId, ip, photo),
+  }
+}
+
 export async function POST(req: Request) {
   const user = await getCurrentUser()
-  if (!user) return reply(401, MESSAGES.sessionEnded)
-
-  const status = planStatus(user)
-  if (status !== "active") {
-    return reply(403, status === "trial_over" ? MESSAGES.trialOver : MESSAGES.expired)
+  let meter: Meter
+  if (user) {
+    const status = planStatus(user)
+    if (status !== "active") {
+      return reply(
+        403,
+        status === "trial_over" ? MESSAGES.trialOver : MESSAGES.expired
+      )
+    }
+    meter = userMeter(user)
+  } else {
+    // Signed in on another phone: not a guest, back to login (as before).
+    if (await hasSessionCookie()) return reply(401, MESSAGES.sessionEnded)
+    meter = guestMeter((await getGuestId(true))!, ipKey(req))
   }
 
   const { messages }: { messages: UIMessage[] } = await req.json()
@@ -187,12 +277,7 @@ export async function POST(req: Request) {
   const question = textOf(last)
   const hasImage = last.parts.some((p) => p.type === "file")
 
-  await renewSession()
-
-  // Photos cost the most tokens: limited per plan per day (checked first).
-  if (hasImage && !(await chargePhoto(user))) {
-    return reply(429, MESSAGES.photoLimit)
-  }
+  if (user) await renewSession()
 
   // Off-topic / improper text questions and questions we have no data for are
   // answered here: no LLM call and no credit used. Photos always go to the LLM.
@@ -204,24 +289,19 @@ export async function POST(req: Request) {
       ? searchQuery(window, question)
       : ""
   if (!hasImage && (isImproper(question) || !looksAgricultural(query))) {
-    return quickReply(MESSAGES.notAgri, (await usageSummary(user)).left)
+    return quickReply(MESSAGES.notAgri, await meter.left())
   }
   const search = query
     ? await searchKnowledge(query, hasImage ? undefined : cropFromText(query))
     : { results: [], unavailable: false }
   const { results } = search
   if (!hasImage && results.length === 0 && !search.unavailable) {
-    return quickReply(MESSAGES.notAvailable, (await usageSummary(user)).left)
+    return quickReply(MESSAGES.notAvailable, await meter.left())
   }
 
-  const cost = creditCost(hasImage)
-  const charged = await chargeCredits(user, cost)
-  if (charged !== "ok") {
-    if (hasImage) await refundPhoto(user.id)
-    const trial = user.plan === "trial" && charged === "period"
-    return reply(429, trial ? MESSAGES.trialLimit : LIMIT_MESSAGE[charged])
-  }
-  const usage = await usageSummary(user)
+  const limited = await meter.charge(hasImage)
+  if (limited) return limited
+  const left = await meter.left()
 
   const model = await chatModel()
   const result = streamText({
@@ -237,22 +317,15 @@ export async function POST(req: Request) {
       reasoningOptions(model.modelId, hasImage ? "low" : "none"),
       hasImage
     ),
-    onFinish: async ({ text, totalUsage }) => {
-      // "Not available" / "ask about farming" / not a farm photo is not a real answer: refund it.
-      const noAnswer = NO_ANSWER.some((m) => text.includes(m))
-      if (noAnswer && hasImage) await refundPhoto(user.id)
-      await recordUsage(
-        user.id,
-        noAnswer ? -cost : 0,
+    // "Not available" / "ask about farming" / not a farm photo is not a real answer: refund it.
+    onFinish: ({ text, totalUsage }) =>
+      meter.settle(
+        NO_ANSWER.some((m) => text.includes(m)),
         totalUsage.inputTokens ?? 0,
         totalUsage.outputTokens ?? 0
-      )
-    },
+      ),
     // The farmer got no answer: give the credits (and photo) back.
-    onError: async () => {
-      if (hasImage) await refundPhoto(user.id)
-      await recordUsage(user.id, -cost)
-    },
+    onError: () => meter.refund(),
   })
 
   return result.toUIMessageStreamResponse({
@@ -261,7 +334,7 @@ export async function POST(req: Request) {
     messageMetadata: ({ part }) =>
       part.type === "start"
         ? {
-            left: usage.left,
+            left,
             sources: results.map(({ source, pages }) => ({ source, pages })),
           }
         : undefined,

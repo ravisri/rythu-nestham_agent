@@ -12,10 +12,13 @@ import {
   WheatIcon,
   type LucideIcon,
 } from "lucide-react"
+import Link from "next/link"
+import { GiftIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { useI18n } from "@/lib/i18n/client"
+import { GUEST } from "@/lib/plans"
 
 // text = the question sent to the AI: always Telugu (RAG data is Telugu).
 // The button label comes from t.welcome.exampleLabels (same order).
@@ -43,7 +46,10 @@ export function Welcome({
   onMic,
   onCamera,
   onPick,
+  guestLeft,
 }: {
+  // Set for guests (not logged in): free questions left today.
+  guestLeft?: number
   micSupported: boolean
   onMic: () => void
   onCamera: () => void
@@ -51,8 +57,8 @@ export function Welcome({
 }) {
   const { t } = useI18n()
   const tile =
-    "h-auto flex-col gap-3 rounded-2xl py-6 text-lg font-semibold shadow-sm"
-  const tileIcon = "flex size-14 items-center justify-center rounded-full"
+    "h-auto flex-col gap-1 rounded-2xl py-3 text-lg font-semibold shadow-sm"
+  const tileIcon = "flex size-10 items-center justify-center rounded-full"
 
   return (
     <div className="flex w-full max-w-5xl flex-col gap-5 py-2">
@@ -72,13 +78,46 @@ export function Welcome({
         </CardContent>
       </Card>
 
+      {guestLeft !== undefined && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/30 bg-card px-4 py-3 shadow-sm">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <GiftIcon className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold flex items-start">{t.guest.banner(GUEST.daily)}</p>
+            <div
+              className="mt-1.5 flex items-center gap-1.5"
+              aria-label={t.guest.left(guestLeft, GUEST.daily)}
+            >
+              {Array.from({ length: GUEST.daily }, (_, i) => (
+                <span
+                  key={i}
+                  className={`h-2 w-6 rounded-full ${i < guestLeft ? "bg-primary" : "bg-muted"}`}
+                />
+              ))}
+              <span className="ml-1 text-sm text-muted-foreground tabular-nums">
+                {guestLeft}/{GUEST.daily}
+              </span>
+            </div>
+          </div>
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="h-9 rounded-full"
+          >
+            <Link href="/login?tab=signup">{t.guest.signup}</Link>
+          </Button>
+        </div>
+      )}
+
       <div
         className={`grid gap-3 ${micSupported ? "grid-cols-2" : "grid-cols-1"}`}
       >
         {micSupported && (
           <Button className={tile} onClick={onMic}>
             <span className={`${tileIcon} bg-primary-foreground/15`}>
-              <MicIcon className="size-8" />
+              <MicIcon className="size-6" />
             </span>
             {t.chat.speak}
           </Button>
@@ -89,7 +128,7 @@ export function Welcome({
           onClick={onCamera}
         >
           <span className={`${tileIcon} bg-primary/10 text-primary`}>
-            <CameraIcon className="size-8" />
+            <CameraIcon className="size-6" />
           </span>
           {t.welcome.sendPhoto}
         </Button>

@@ -314,9 +314,9 @@ function NewPasswordForm({
   )
 }
 
-export function AuthForm() {
+export function AuthForm({ initialTab = "login" }: { initialTab?: Tab }) {
   const { t } = useI18n()
-  const [tab, setTab] = useState<Tab>("login")
+  const [tab, setTab] = useState<Tab>(initialTab)
 
   return (
     <div className="relative min-h-dvh bg-muted dark:bg-background">
