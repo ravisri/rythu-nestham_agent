@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   BotIcon,
   CircleHelpIcon,
+  DownloadIcon,
   LanguagesIcon,
   LogInIcon,
   LogOutIcon,
@@ -28,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { logout } from "@/app/login/actions"
+import { usePwaInstall } from "@/hooks/use-pwa-install"
 import { useI18n, useSwitchLocale } from "@/lib/i18n/client"
 import { HelpDialog } from "./help-dialog"
 
@@ -52,6 +54,7 @@ export function ProfileMenu({
   const { switchLocale } = useSwitchLocale()
   const { setTheme, resolvedTheme } = useTheme()
   const [helpOpen, setHelpOpen] = useState(false)
+  const pwa = usePwaInstall()
   const [loggingOut, startLogout] = useTransition()
 
   return (
@@ -125,6 +128,12 @@ export function ProfileMenu({
             </>
           )}
           <DropdownMenuSeparator />
+          {pwa.canInstall && (
+            <DropdownMenuItem className={ITEM} onSelect={pwa.install}>
+              <DownloadIcon />
+              {t.pwa.menu}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem className={ITEM} onSelect={() => setHelpOpen(true)}>
             <CircleHelpIcon />
             {t.help.open}

@@ -85,6 +85,14 @@ export const te = {
     disclaimer:
       "AI సలహా మాత్రమే. మందులు వాడే ముందు స్థానిక వ్యవసాయ అధికారిని సంప్రదించండి.",
   },
+  pwa: {
+    title: "రైతు నేస్తం యాప్‌ను ఇన్‌స్టాల్ చేయండి",
+    body: "ఫోన్ హోమ్ స్క్రీన్ నుండి ఒక్క నొక్కుతో తెరవండి.",
+    install: "ఇన్‌స్టాల్",
+    later: "తర్వాత",
+    iosHint: "షేర్ నొక్కి \"Add to Home Screen\" ఎంచుకోండి.",
+    menu: "యాప్ ఇన్‌స్టాల్ చేయండి",
+  },
   guest: {
     badge: "అతిథి",
     left: (n: number, total: number) => `ఉచిత ప్రశ్నలు: ${n}/${total}`,
@@ -312,6 +320,14 @@ export const en: Dictionary = {
     listening: "Go ahead, I'm listening…",
     disclaimer:
       "AI advice only. Consult your local agriculture officer before using any pesticide.",
+  },
+  pwa: {
+    title: "Install the Rythu Nestham app",
+    body: "Open it with one tap from your home screen.",
+    install: "Install",
+    later: "Later",
+    iosHint: "Tap Share, then \"Add to Home Screen\".",
+    menu: "Install app",
   },
   guest: {
     badge: "Guest",

@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { GiftIcon } from "lucide-react"
+import { InstallBanner } from "@/components/pwa/install-banner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -62,6 +63,7 @@ export function Welcome({
 
   return (
     <div className="flex w-full max-w-5xl flex-col gap-5 py-2">
+      <InstallBanner />
       <Card className="relative overflow-hidden border-primary/20 bg-linear-to-br from-primary/15 via-primary/5 to-card shadow-sm">
         <CardContent className="flex flex-col items-center gap-3 text-center">
           <span className="flex size-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
@@ -84,7 +86,9 @@ export function Welcome({
             <GiftIcon className="size-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="font-semibold flex items-start">{t.guest.banner(GUEST.daily)}</p>
+            <p className="flex items-start font-semibold">
+              {t.guest.banner(GUEST.daily)}
+            </p>
             <div
               className="mt-1.5 flex items-center gap-1.5"
               aria-label={t.guest.left(guestLeft, GUEST.daily)}
