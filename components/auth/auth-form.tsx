@@ -5,12 +5,7 @@ import { SproutIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState, type ReactNode } from "react"
 import { useForm } from "react-hook-form"
-import {
-  checkReset,
-  login,
-  resetPassword,
-  signup,
-} from "@/app/login/actions"
+import { checkReset, login, resetPassword, signup } from "@/app/login/actions"
 import { FormInput } from "@/components/auth/form-input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -215,7 +210,8 @@ function ForgotForm() {
   const onSubmit = form.handleSubmit(async (values) => {
     setError(null)
     const result = await checkReset(values, getDeviceId())
-    if (result.ok) setAccount({ identifier: values.identifier, trusted: result.trusted })
+    if (result.ok)
+      setAccount({ identifier: values.identifier, trusted: result.trusted })
     else setError(result.error)
   })
 
@@ -323,62 +319,67 @@ export function AuthForm() {
   const [tab, setTab] = useState<Tab>("login")
 
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 bg-muted p-4 dark:bg-background">
-      <LanguageToggle className="absolute top-4 right-4 h-10" />
-      <div className="flex items-center justify-center gap-3">
-        <span className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <SproutIcon className="size-7" />
-        </span>
-        <div>
-          <h1 className="text-2xl font-semibold">{t.common.appName}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t.auth.tagline}
-          </p>
+    <div className="relative min-h-dvh bg-muted dark:bg-background">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-linear-to-b from-primary/20 to-transparent" />
+      <main className="relative mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 p-4">
+        <LanguageToggle className="absolute top-4 right-4 h-10" />
+        <div className="flex flex-col items-center gap-3 text-center">
+          <span className="flex size-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
+            <SproutIcon className="size-9" />
+          </span>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {t.common.appName}
+            </h1>
+            <p className="mt-1 text-base text-muted-foreground">
+              {t.auth.tagline}
+            </p>
+          </div>
         </div>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">
-            {tab === "signup"
-              ? t.auth.signup
-              : tab === "forgot"
-                ? t.auth.forgot
-                : t.auth.login}
-          </CardTitle>
-          <CardDescription className="text-base">
-            {tab === "signup"
-              ? t.auth.signupHint
-              : tab === "forgot"
-                ? t.auth.forgotHint
-                : t.auth.loginHint}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-            <TabsList className="mb-4 grid h-11 w-full grid-cols-3">
-              <TabsTrigger value="login" className="text-base">
-                {t.auth.login}
-              </TabsTrigger>
-              <TabsTrigger value="signup" className="text-base">
-                {t.auth.signup}
-              </TabsTrigger>
-              <TabsTrigger value="forgot" className="text-base">
-                {t.auth.forgotTab}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="login">
-              <LoginForm />
-            </TabsContent>
-            <TabsContent value="signup">
-              <SignupForm />
-            </TabsContent>
-            <TabsContent value="forgot">
-              <ForgotForm />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-    </main>
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-xl">
+              {tab === "signup"
+                ? t.auth.signup
+                : tab === "forgot"
+                  ? t.auth.forgot
+                  : t.auth.login}
+            </CardTitle>
+            <CardDescription className="text-base">
+              {tab === "signup"
+                ? t.auth.signupHint
+                : tab === "forgot"
+                  ? t.auth.forgotHint
+                  : t.auth.loginHint}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+              <TabsList className="mb-4 grid h-11 w-full grid-cols-3">
+                <TabsTrigger value="login" className="text-base">
+                  {t.auth.login}
+                </TabsTrigger>
+                <TabsTrigger value="signup" className="text-base">
+                  {t.auth.signup}
+                </TabsTrigger>
+                <TabsTrigger value="forgot" className="text-base">
+                  {t.auth.forgotTab}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="login">
+                <LoginForm />
+              </TabsContent>
+              <TabsContent value="signup">
+                <SignupForm />
+              </TabsContent>
+              <TabsContent value="forgot">
+                <ForgotForm />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </main>
+    </div>
   )
 }

@@ -76,6 +76,8 @@ export const te = {
     listen: "వినండి",
     share: "షేర్",
     source: "ఆధారం:",
+    sourcesCount: (n: number) => `${n} ఆధారాలు`,
+    sourcesTitle: "ఈ సమాధానానికి ఆధారాలు (ANGRAU / ICAR)",
     listening: "చెప్పండి, వింటున్నాను…",
     disclaimer:
       "AI సలహా మాత్రమే. మందులు వాడే ముందు స్థానిక వ్యవసాయ అధికారిని సంప్రదించండి.",
@@ -281,6 +283,8 @@ export const en: Dictionary = {
     listen: "Listen",
     share: "Share",
     source: "Source:",
+    sourcesCount: (n: number) => `${n} source${n === 1 ? "" : "s"}`,
+    sourcesTitle: "Sources for this answer (ANGRAU / ICAR)",
     listening: "Go ahead, I'm listening…",
     disclaimer:
       "AI advice only. Consult your local agriculture officer before using any pesticide.",

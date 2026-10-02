@@ -6,7 +6,9 @@ import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import {
   CameraIcon,
+  CoinsIcon,
   MicIcon,
+  ShieldCheckIcon,
   SproutIcon,
   Trash2Icon,
   XIcon,
@@ -37,6 +39,7 @@ import {
 } from "@/components/ai-elements/prompt-input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -96,8 +99,7 @@ const transport = new DefaultChatTransport({
 const IMAGE_ONLY_TEXT = "ఈ ఫోటో చూసి సమస్య, పరిష్కారం చెప్పండి."
 
 // Too few Telugu letters = speech wasn't understood (noise, one sound, English).
-const unclearSpeech = (text: string) =>
-  (text.match(/[ఀ-౿]/g) ?? []).length < 5
+const unclearSpeech = (text: string) => (text.match(/[ఀ-౿]/g) ?? []).length < 5
 
 type FileInput = { url: string; filename?: string }
 type ToolPart = { type: string; state?: string; output?: unknown }
@@ -382,19 +384,32 @@ function ChatInner({
 
   return (
     <div className="mx-auto flex h-dvh w-full flex-col bg-muted dark:bg-background">
-      <header className="flex items-center gap-3 border-b bg-background/80 px-4 py-3 backdrop-blur">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+      <header className="sticky top-0 z-10 flex items-center gap-3 border-b bg-background/80 px-4 py-3 backdrop-blur">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
           <SproutIcon className="size-6" />
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="text-lg leading-tight font-semibold">{t.common.appName}</h1>
-          <p className="truncate text-sm text-muted-foreground">
-            {usage.status === "active"
-              ? `${t.plans[usage.plan]} · ${t.chat.left(left)}`
-              : usage.status === "trial_over"
+          <h1 className="text-lg leading-tight font-bold tracking-tight">
+            {t.common.appName}
+          </h1>
+          {usage.status === "active" ? (
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+              <Badge
+                variant="secondary"
+                className="shrink-0 bg-primary/10 text-primary"
+              >
+                {t.plans[usage.plan]}
+              </Badge>
+              <CoinsIcon className="size-3.5 shrink-0" />
+              <span className="truncate">{t.chat.left(left)}</span>
+            </div>
+          ) : (
+            <Badge variant="destructive" className="mt-0.5">
+              {usage.status === "trial_over"
                 ? t.chat.trialOver
                 : t.chat.planExpired}
-          </p>
+            </Badge>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <ProfileMenu
@@ -446,8 +461,8 @@ function ChatInner({
         </div>
       </header>
 
-      <Conversation className="flex-1 w-full">
-        <ConversationContent className="gap-6 mx-auto max-w-6xl w-full ">
+      <Conversation className="w-full flex-1">
+        <ConversationContent className="mx-auto w-full max-w-6xl gap-6">
           {messages.length === 0 ? (
             <ConversationEmptyState className="justify-start p-0">
               <Welcome
@@ -469,7 +484,7 @@ function ChatInner({
               const content = (
                 <Message from={message.role} className="max-w-5xl">
                   <MessageContent
-                    className={`${bodySize} leading-relaxed group-[.is-assistant]:rounded-2xl group-[.is-assistant]:border group-[.is-assistant]:bg-card group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-user]:rounded-2xl group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground`}
+                    className={`${bodySize} leading-relaxed group-[.is-assistant]:rounded-2xl group-[.is-assistant]:rounded-tl-md group-[.is-assistant]:border group-[.is-assistant]:bg-card group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-assistant]:shadow-sm group-[.is-user]:rounded-2xl group-[.is-user]:rounded-br-md group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground group-[.is-user]:shadow-sm`}
                   >
                     {images.map((image, i) => (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -497,12 +512,15 @@ function ChatInner({
               if (isUser) return <div key={message.id}>{content}</div>
               return (
                 <div key={message.id} className="flex items-start gap-2">
-                  <Avatar className="mt-1 size-9">
+                  <Avatar className="mt-1 size-9 shadow-sm">
                     <AvatarFallback className="bg-primary text-primary-foreground">
                       <SproutIcon className="size-5" />
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1 space-y-2">
+                    <p className="text-xs font-semibold text-primary">
+                      {t.common.appName}
+                    </p>
                     {content}
                     <Sources sources={sourcesOf(message)} />
                     <Actions
@@ -518,8 +536,15 @@ function ChatInner({
             })
           )}
           {showProgress && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Spinner /> {progressLabel(last, t)}
+            <div className="flex items-start gap-2">
+              <Avatar className="mt-1 size-9 shadow-sm">
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  <SproutIcon className="size-5" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border bg-card px-4 py-3 text-muted-foreground shadow-sm">
+                <Spinner className="text-primary" /> {progressLabel(last, t)}
+              </div>
             </div>
           )}
         </ConversationContent>
@@ -528,12 +553,12 @@ function ChatInner({
 
       <div className="space-y-2 border-t bg-background p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {info && (
-          <Alert>
+          <Alert className="mx-auto max-w-5xl">
             <AlertDescription>{info}</AlertDescription>
           </Alert>
         )}
         {alertText && !info && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="mx-auto max-w-5xl">
             <AlertDescription>{alertText}</AlertDescription>
           </Alert>
         )}
@@ -549,7 +574,7 @@ function ChatInner({
           maxFiles={1}
           maxFileSize={10 * 1024 * 1024}
           onError={() => setNotice(t.chat.photoLimit)}
-          className="rounded-2xl max-w-5xl mx-auto"
+          className="mx-auto max-w-5xl rounded-2xl shadow-sm"
         >
           {attachments.files.length > 0 && (
             <PromptInputHeader>
@@ -593,9 +618,7 @@ function ChatInner({
           )}
           <PromptInputTextarea
             placeholder={
-              teluguTyping
-                ? t.chat.placeholderTranslit
-                : t.chat.placeholder
+              teluguTyping ? t.chat.placeholderTranslit : t.chat.placeholder
             }
             className={`min-h-14 ${bodySize}`}
             disabled={busy}
@@ -650,7 +673,8 @@ function ChatInner({
             />
           </PromptInputFooter>
         </PromptInput>
-        <p className="text-center text-xs text-muted-foreground">
+        <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+          <ShieldCheckIcon className="size-3.5 shrink-0 text-primary" />
           {t.chat.disclaimer}
         </p>
       </div>

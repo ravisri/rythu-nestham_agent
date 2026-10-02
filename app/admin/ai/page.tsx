@@ -1,11 +1,10 @@
-import { ArrowLeftIcon } from "lucide-react"
-import Link from "next/link"
+import { BotIcon } from "lucide-react"
 import { redirect } from "next/navigation"
 import {
   AiSettingsForm,
   type KeyStatus,
 } from "@/components/admin/ai-settings-form"
-import { Button } from "@/components/ui/button"
+import { PageHeader, PageShell } from "@/components/page-header"
 import { modelIds } from "@/lib/ai"
 import {
   AI_PROVIDERS,
@@ -43,23 +42,24 @@ export default async function AiSettingsPage() {
   ) as Record<AiProvider, KeyStatus>
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-3xl flex-col gap-4 bg-muted p-4 dark:bg-background">
-      <header className="flex items-center gap-3">
-        <Button asChild variant="outline" size="icon" className="size-10">
-          <Link href="/admin" aria-label={t.common.back}>
-            <ArrowLeftIcon />
-          </Link>
-        </Button>
-        <h1 className="flex-1 text-xl font-semibold">{t.admin.aiTitle}</h1>
-      </header>
-
-      <AiSettingsForm
-        chat={splitModelId(ids.chat)}
-        ocr={splitModelId(ids.ocr)}
-        embedding={ids.embedding}
-        compatBaseUrl={settings.compatBaseUrl ?? process.env.COMPAT_BASE_URL ?? ""}
-        keys={keys}
+    <PageShell>
+      <PageHeader
+        backHref="/admin"
+        backLabel={t.common.back}
+        icon={BotIcon}
+        title={t.admin.aiTitle}
       />
-    </main>
+      <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
+        <AiSettingsForm
+          chat={splitModelId(ids.chat)}
+          ocr={splitModelId(ids.ocr)}
+          embedding={ids.embedding}
+          compatBaseUrl={
+            settings.compatBaseUrl ?? process.env.COMPAT_BASE_URL ?? ""
+          }
+          keys={keys}
+        />
+      </main>
+    </PageShell>
   )
 }

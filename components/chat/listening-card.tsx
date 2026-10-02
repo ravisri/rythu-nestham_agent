@@ -14,15 +14,15 @@ export function ListeningCard({
 }) {
   const { t } = useI18n()
   return (
-    <Card className="border-primary/40 bg-primary/5">
-      <CardContent className="flex items-center gap-4">
+    <Card className="mx-auto max-w-5xl border-primary/40 bg-primary/5 py-4 shadow-sm">
+      <CardContent className="flex items-center gap-4 px-4">
         <span className="relative flex size-14 shrink-0 items-center justify-center">
-          <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" />
-          <span className="relative flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <MicAudioLines className="size-7 " />
+          <span className="absolute -inset-1 animate-ping rounded-full bg-primary/25" />
+          <span className="relative flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md">
+            <MicAudioLines className="size-7" />
           </span>
         </span>
-        <p className="min-w-0 flex-1 text-base leading-snug">
+        <p className="min-w-0 flex-1 rounded-xl bg-background/70 px-3 py-2 text-base leading-snug">
           {transcript || t.chat.listening}
         </p>
         <Button
