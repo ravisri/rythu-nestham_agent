@@ -50,18 +50,27 @@ export function useSpeechRecognition(handlers: {
     rec.lang = "te-IN"
     rec.interimResults = true
     rec.continuous = false
+    // Ended with no words and no error (silence) -> still tell the farmer.
+    let gotFinal = false
+    let failed = false
 
     rec.onresult = (e) => {
       const parts = Array.from(e.results)
       const text = parts.map((r) => r[0].transcript).join(" ").trim()
-      if (parts[parts.length - 1]?.isFinal) latest.current.onFinal(text)
-      else latest.current.onInterim(text)
+      if (parts[parts.length - 1]?.isFinal) {
+        gotFinal = true
+        latest.current.onFinal(text)
+      } else latest.current.onInterim(text)
     }
     rec.onerror = (e) => {
+      failed = true
       setError(e.error)
       setListening(false)
     }
-    rec.onend = () => setListening(false)
+    rec.onend = () => {
+      if (!gotFinal && !failed) setError("no-speech")
+      setListening(false)
+    }
 
     setError(null)
     recognition.current = rec

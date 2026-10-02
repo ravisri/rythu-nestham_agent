@@ -1,7 +1,9 @@
 "use server"
 
+import { redirect } from "next/navigation"
 import {
   deviceHash,
+  endSession,
   findUser,
   hashSecret,
   newRecoveryCode,
@@ -191,4 +193,9 @@ export async function resetPassword(
     await startSession(user, device.data)
     return { ok: true }
   })
+}
+
+export async function logout() {
+  await endSession()
+  redirect("/login")
 }

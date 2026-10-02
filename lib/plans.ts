@@ -1,11 +1,12 @@
 // Plans and credit rules. Client-safe (no server imports).
 // 1 text question = 1 credit (~3k tokens), 1 photo question = 2 credits.
+// photosDaily: photo questions per IST day (photos cost the most tokens).
 
 export const PLANS = {
   // Labels: lib/i18n/dictionaries.ts (plans.*)
-  trial: { daily: 5, period: 50, perMonth: false },
-  pro: { daily: 20, period: 400, perMonth: true },
-  pro_plus: { daily: 80, period: 1500, perMonth: true },
+  trial: { daily: 5, period: 50, perMonth: false, photosDaily: 2 },
+  pro: { daily: 20, period: 400, perMonth: true, photosDaily: 10 },
+  pro_plus: { daily: 80, period: 1500, perMonth: true, photosDaily: 30 },
 } as const
 
 export type Plan = keyof typeof PLANS
@@ -67,6 +68,10 @@ export const MESSAGES = {
     "దయచేసి వ్యవసాయం, పంటలకు సంబంధించిన ప్రశ్నను స్పష్టంగా అడగండి.",
   notAvailable:
     "ప్రస్తుతం ఈ సమాచారం యాప్‌లో అందుబాటులో లేదు. అడ్మిన్ త్వరలోనే దీన్ని చేరుస్తారు. అప్పటివరకు స్థానిక రైతు భరోసా కేంద్రాన్ని సంప్రదించండి.",
+  photoLimit:
+    "ఈరోజు ఫోటో పరిమితి అయిపోయింది. రేపు మళ్లీ ఫోటో పంపండి. ఇప్పుడు ప్రశ్నను టైప్ చేయండి లేదా మాట్లాడండి.",
+  notAgriImage:
+    "దయచేసి వ్యవసాయానికి సంబంధించిన ఫోటోలు మాత్రమే పంపండి (పంట, ఆకు, కాయ, పురుగు, నేల).",
   trialLimit:
     "ఉచిత ట్రయల్ ప్రశ్నలు అయిపోయాయి. ప్రో ప్లాన్ కోసం అడ్మిన్‌ను సంప్రదించండి.",
 } as const

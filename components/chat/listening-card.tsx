@@ -1,6 +1,6 @@
 "use client"
 
-import { MicIcon, SquareIcon } from "lucide-react"
+import { MicAudioLines, SquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useI18n } from "@/lib/i18n/client"
@@ -19,7 +19,7 @@ export function ListeningCard({
         <span className="relative flex size-14 shrink-0 items-center justify-center">
           <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" />
           <span className="relative flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <MicIcon className="size-7" />
+            <MicAudioLines className="size-7 " />
           </span>
         </span>
         <p className="min-w-0 flex-1 text-base leading-snug">

@@ -1,18 +1,23 @@
 "use client"
 
-import { CameraIcon, CircleHelpIcon, KeyboardIcon, MicIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { CameraIcon, KeyboardIcon, MicIcon } from "lucide-react"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { useI18n } from "@/lib/i18n/client"
 
-export function HelpDialog() {
+// Opened from the profile menu.
+export function HelpDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const { t } = useI18n()
   const steps = [
     { icon: MicIcon, text: t.help.mic },
@@ -20,17 +25,7 @@ export function HelpDialog() {
     { icon: KeyboardIcon, text: t.help.keyboard },
   ]
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          className="size-10 rounded-xl"
-          aria-label={t.help.open}
-        >
-          <CircleHelpIcon />
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t.help.title}</DialogTitle>

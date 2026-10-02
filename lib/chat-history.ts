@@ -1,5 +1,6 @@
 // Chats live only in this browser (never in the DB), one key per user.
 import type { UIMessage } from "ai"
+import { istDay } from "@/lib/plans"
 
 const key = (userId: string) => `rn_chat_${userId}`
 
@@ -43,4 +44,38 @@ export function saveChat(userId: string, messages: UIMessage[]) {
       return
     } catch {}
   }
+}
+
+// Text questions answered today (IST): a repeat is not sent again (saves credits).
+const askedKey = (userId: string) => `rn_asked_${userId}`
+// "మిర్చి ఆకు ముడత?" and "మిర్చి  ఆకు ముడత" count as the same question.
+const normalize = (question: string) =>
+  question.toLowerCase().replace(/[\s\p{P}]+/gu, "")
+
+function askedToday(userId: string): string[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(askedKey(userId)) ?? "{}")
+    return saved.day === istDay() && Array.isArray(saved.questions)
+      ? saved.questions
+      : []
+  } catch {
+    return []
+  }
+}
+
+export function wasAskedToday(userId: string, question: string) {
+  const q = normalize(question)
+  return q !== "" && askedToday(userId).includes(q)
+}
+
+export function markAsked(userId: string, question: string) {
+  const q = normalize(question)
+  if (!q) return
+  const questions = [...new Set([...askedToday(userId), q])].slice(-100)
+  try {
+    localStorage.setItem(
+      askedKey(userId),
+      JSON.stringify({ day: istDay(), questions })
+    )
+  } catch {}
 }

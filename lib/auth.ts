@@ -137,3 +137,17 @@ export async function renewSession() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value
   if (token) await setSessionCookie(token)
 }
+
+// Logout: forget this session in the DB and remove the cookie.
+export async function endSession() {
+  const store = await cookies()
+  const token = store.get(SESSION_COOKIE)?.value
+  if (token) {
+    const { error } = await getSupabase()
+      .from("app_users")
+      .update({ session_token_hash: null })
+      .eq("session_token_hash", sha256(token))
+    if (error) throw error
+  }
+  store.delete(SESSION_COOKIE)
+}

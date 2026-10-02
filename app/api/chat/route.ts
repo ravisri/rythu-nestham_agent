@@ -12,7 +12,13 @@ import { isImproper, looksAgricultural } from "@/lib/agri-topic"
 import { chatModel, reasoningOptions } from "@/lib/ai"
 import { getCurrentUser, renewSession } from "@/lib/auth"
 import { creditCost, MESSAGES, planStatus } from "@/lib/plans"
-import { chargeCredits, recordUsage, usageSummary } from "@/lib/usage"
+import {
+  chargeCredits,
+  chargePhoto,
+  recordUsage,
+  refundPhoto,
+  usageSummary,
+} from "@/lib/usage"
 import { BANNED_PROMPT_LIST } from "@/lib/banned-pesticides"
 import { toCrop } from "@/lib/crops"
 import { searchKnowledge } from "@/lib/rag"
@@ -35,7 +41,8 @@ Combine useful points from ALL reference items, not just the first. Include only
 (If you need more details, just ask one short question instead.)
 1. Identify the crop and problem from the text or photo. If unclear, ask ONE short Telugu follow-up question instead of guessing.`
 
-const SEARCH_RULE = `2. For a photo, if the reference below does not cover the problem you see, FIRST call queryCropKnowledgeBase with a short TELUGU query using Telugu crop and problem names (e.g. "వరి అగ్గి తెగులు నివారణ") and the English crop name, writing no text before the call.`
+const SEARCH_RULE = `2. Photo: first check it. If it does not show crops, plants, leaves, fruits, seeds, soil, pests, farm animals or fields, reply exactly: "${MESSAGES.notAgriImage}" and nothing else (no search).
+For a farm photo, if the reference below does not cover the problem you see, FIRST call queryCropKnowledgeBase with a short TELUGU query using Telugu crop and problem names (e.g. "వరి అగ్గి తెగులు నివారణ") and the English crop name, writing no text before the call.`
 
 const REFERENCE_RULE = `2. For any disease, pest, nutrient, pesticide or dose question, use the reference text below (ANGRAU/ICAR guides).`
 
@@ -139,6 +146,19 @@ function quickReply(text: string, left: number) {
   return createUIMessageStreamResponse({ stream })
 }
 
+const NO_ANSWER = [MESSAGES.notAvailable, MESSAGES.notAgri, MESSAGES.notAgriImage]
+
+function withMediaResolution(
+  options: ReturnType<typeof reasoningOptions>,
+  hasImage: boolean
+) {
+  if (!hasImage) return options
+  return {
+    ...options,
+    google: { ...options.google, mediaResolution: "MEDIA_RESOLUTION_MEDIUM" },
+  }
+}
+
 const LIMIT_MESSAGE = {
   daily: MESSAGES.dailyLimit,
   period: MESSAGES.periodLimit,
@@ -166,10 +186,20 @@ export async function POST(req: Request) {
 
   await renewSession()
 
+  // Photos cost the most tokens: limited per plan per day (checked first).
+  if (hasImage && !(await chargePhoto(user))) {
+    return reply(429, MESSAGES.photoLimit)
+  }
+
   // Off-topic / improper text questions and questions we have no data for are
   // answered here: no LLM call and no credit used. Photos always go to the LLM.
   // (Embedding similarity alone can't spot off-topic Telugu, so check words first.)
-  const query = question ? searchQuery(window, question) : ""
+  // Photo with only the generic "look at this photo" text: skip the pre-search
+  // (its chunks would be irrelevant tokens); the model searches for what it sees.
+  const query =
+    question && (!hasImage || looksAgricultural(question))
+      ? searchQuery(window, question)
+      : ""
   if (!hasImage && (isImproper(question) || !looksAgricultural(query))) {
     return quickReply(MESSAGES.notAgri, (await usageSummary(user)).left)
   }
@@ -184,6 +214,7 @@ export async function POST(req: Request) {
   const cost = creditCost(hasImage)
   const charged = await chargeCredits(user, cost)
   if (charged !== "ok") {
+    if (hasImage) await refundPhoto(user.id)
     const trial = user.plan === "trial" && charged === "period"
     return reply(429, trial ? MESSAGES.trialLimit : LIMIT_MESSAGE[charged])
   }
@@ -198,19 +229,27 @@ export async function POST(req: Request) {
     stopWhen: stepCountIs(3),
     maxOutputTokens: 1500,
     // Text answers come from the reference; only photos need some thinking.
-    providerOptions: reasoningOptions(model.modelId, hasImage ? "low" : "none"),
-    onFinish: ({ text, totalUsage }) =>
-      recordUsage(
+    // Photos: fixed medium resolution (~258 tokens) instead of tiling (Gemini only).
+    providerOptions: withMediaResolution(
+      reasoningOptions(model.modelId, hasImage ? "low" : "none"),
+      hasImage
+    ),
+    onFinish: async ({ text, totalUsage }) => {
+      // "Not available" / "ask about farming" / not a farm photo is not a real answer: refund it.
+      const noAnswer = NO_ANSWER.some((m) => text.includes(m))
+      if (noAnswer && hasImage) await refundPhoto(user.id)
+      await recordUsage(
         user.id,
-        // "Not available" / "ask about farming" is not a real answer: refund it.
-        [MESSAGES.notAvailable, MESSAGES.notAgri].some((m) => text.includes(m))
-          ? -cost
-          : 0,
+        noAnswer ? -cost : 0,
         totalUsage.inputTokens ?? 0,
         totalUsage.outputTokens ?? 0
-      ),
-    // The farmer got no answer: give the credits back.
-    onError: () => recordUsage(user.id, -cost),
+      )
+    },
+    // The farmer got no answer: give the credits (and photo) back.
+    onError: async () => {
+      if (hasImage) await refundPhoto(user.id)
+      await recordUsage(user.id, -cost)
+    },
   })
 
   return result.toUIMessageStreamResponse({

@@ -7,13 +7,10 @@ import { DefaultChatTransport, type UIMessage } from "ai"
 import {
   CameraIcon,
   MicIcon,
-  MoonIcon,
   SproutIcon,
-  SunIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 import {
   Conversation,
   ConversationContent,
@@ -57,7 +54,14 @@ import type { Dictionary } from "@/lib/i18n/dictionaries"
 import { useI18n } from "@/lib/i18n/client"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis"
-import { clearChat, loadChat, saveChat } from "@/lib/chat-history"
+import { te as teluguText } from "@/lib/i18n/dictionaries"
+import {
+  clearChat,
+  loadChat,
+  markAsked,
+  saveChat,
+  wasAskedToday,
+} from "@/lib/chat-history"
 import { compressImage } from "@/lib/image"
 import { MESSAGES, type Usage } from "@/lib/plans"
 import { useTeluguLexicon } from "@/hooks/use-telugu-lexicon"
@@ -66,14 +70,34 @@ import {
   suggest,
   transliterateText,
 } from "@/lib/telugu-translit"
-import { HelpDialog } from "./help-dialog"
 import { ListeningCard } from "./listening-card"
 import { Actions, Sources } from "./message-extras"
 import { Welcome } from "./welcome"
 
-const transport = new DefaultChatTransport({ api: "/api/chat" })
+const transport = new DefaultChatTransport({
+  api: "/api/chat",
+  // The server only uses the last 6 messages and the newest photo (prune() in
+  // app/api/chat/route.ts): don't upload older photos again with every question.
+  prepareSendMessagesRequest: ({ id, messages, body }) => ({
+    body: {
+      ...body,
+      id,
+      messages: messages
+        .slice(-6)
+        .map((m, i, recent) =>
+          i === recent.length - 1
+            ? m
+            : { ...m, parts: m.parts.filter((p) => p.type !== "file") }
+        ),
+    },
+  }),
+})
 // Sent to the AI with a photo-only question: always Telugu.
 const IMAGE_ONLY_TEXT = "ఈ ఫోటో చూసి సమస్య, పరిష్కారం చెప్పండి."
+
+// Too few Telugu letters = speech wasn't understood (noise, one sound, English).
+const unclearSpeech = (text: string) =>
+  (text.match(/[ఀ-౿]/g) ?? []).length < 5
 
 type FileInput = { url: string; filename?: string }
 type ToolPart = { type: string; state?: string; output?: unknown }
@@ -154,6 +178,15 @@ function ChatInner({
   const { messages, sendMessage, setMessages, status, error, stop } = useChat({
     transport,
     messages: initialMessages,
+    // Remember answered text questions so a same-day repeat isn't sent again.
+    onFinish: ({ message, messages, isError, isAbort, isDisconnect }) => {
+      if (isError || isAbort || isDisconnect || message.role !== "assistant")
+        return
+      const question = messages.findLast((m) => m.role === "user")
+      if (question && !question.parts.some((p) => p.type === "file")) {
+        markAsked(userId, textOf(question))
+      }
+    },
   })
   const [left, setLeft] = useState(usage.left)
   // Messages that came from storage (their credit counts are stale).
@@ -166,13 +199,13 @@ function ChatInner({
     speak,
     stop: stopSpeech,
   } = useSpeechSynthesis()
-  const { setTheme, resolvedTheme } = useTheme()
   const [largeText, setLargeText] = useState(false)
   // English letters -> Telugu while typing (mirchi -> మిర్చి).
   const [teluguTyping, setTeluguTyping] = useState(true)
   // Real Telugu words, so loose spellings become proper words (vache -> వచ్చే).
   const lexicon = useTeluguLexicon(teluguTyping) ?? undefined
   const [notice, setNotice] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
 
   const busy = status === "submitted" || status === "streaming"
 
@@ -219,6 +252,17 @@ function ChatInner({
     if (busy || (!text.trim() && files.length === 0)) return
     stopSpeech()
     setNotice(null)
+    setInfo(null)
+    // The last word may have been typed without a space after it.
+    const typed = teluguTyping
+      ? transliterateText(text.trim(), lexicon)
+      : text.trim()
+    // Same text question already answered today: no API call, no credit.
+    if (files.length === 0 && wasAskedToday(userId, typed)) {
+      setInfo(t.chat.askedToday)
+      if (canSpeak) speak("asked-today", teluguText.chat.askedToday)
+      return
+    }
     const compressed = await Promise.all(
       files.map(async (f) => ({
         type: "file" as const,
@@ -227,10 +271,6 @@ function ChatInner({
         url: await compressImage(f.url),
       }))
     )
-    // The last word may have been typed without a space after it.
-    const typed = teluguTyping
-      ? transliterateText(text.trim(), lexicon)
-      : text.trim()
     await sendMessage({
       text: typed || IMAGE_ONLY_TEXT,
       files: compressed,
@@ -274,9 +314,24 @@ function ChatInner({
     onFinal: (text) => {
       controller.textInput.clear()
       const files = [...attachments.files]
-      void send(text, files).then(() => attachments.clear())
+      const unclear = unclearSpeech(text)
+      // Unclear voice: ask again instead of spending a credit (a photo still goes).
+      if (unclear && files.length === 0) {
+        setInfo(t.chat.micNoSpeech)
+        if (canSpeak) speak("mic-unclear", teluguText.chat.micNoSpeech)
+        return
+      }
+      void send(unclear ? "" : text, files).then(() => attachments.clear())
     },
   })
+
+  // Silence / no match: also say it aloud (many farmers can't read the alert).
+  useEffect(() => {
+    if ((mic.error === "no-speech" || mic.error === "no-match") && canSpeak) {
+      speak("mic-unclear", teluguText.chat.micNoSpeech)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mic.error])
 
   function handleSubmit(message: PromptInputMessage) {
     return send(message.text, message.files)
@@ -292,6 +347,7 @@ function ChatInner({
   function clearHistory() {
     stopSpeech()
     setNotice(null)
+    setInfo(null)
     setMessages([])
     setLoadedCount(0)
     clearChat(userId)
@@ -310,7 +366,7 @@ function ChatInner({
   const micNotice =
     mic.error === "not-allowed"
       ? t.chat.micDenied
-      : mic.error === "no-speech"
+      : mic.error === "no-speech" || mic.error === "no-match"
         ? t.chat.micNoSpeech
         : mic.error
           ? t.chat.micBroken
@@ -341,7 +397,12 @@ function ChatInner({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <ProfileMenu username={username} isAdmin={isAdmin} />
+          <ProfileMenu
+            username={username}
+            isAdmin={isAdmin}
+            largeText={largeText}
+            onToggleTextSize={toggleTextSize}
+          />
           {messages.length > 0 && (
             <Dialog>
               <DialogTrigger asChild>
@@ -382,29 +443,6 @@ function ChatInner({
               </DialogContent>
             </Dialog>
           )}
-          <HelpDialog />
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-10 rounded-xl text-base font-semibold"
-            aria-label={t.chat.textSize}
-            aria-pressed={largeText}
-            onClick={toggleTextSize}
-          >
-            A+
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-10 rounded-xl"
-            aria-label={t.chat.theme}
-            onClick={() =>
-              setTheme(resolvedTheme === "dark" ? "light" : "dark")
-            }
-          >
-            <SunIcon className="hidden dark:block" />
-            <MoonIcon className="dark:hidden" />
-          </Button>
         </div>
       </header>
 
@@ -489,7 +527,12 @@ function ChatInner({
       </Conversation>
 
       <div className="space-y-2 border-t bg-background p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        {alertText && (
+        {info && (
+          <Alert>
+            <AlertDescription>{info}</AlertDescription>
+          </Alert>
+        )}
+        {alertText && !info && (
           <Alert variant="destructive">
             <AlertDescription>{alertText}</AlertDescription>
           </Alert>

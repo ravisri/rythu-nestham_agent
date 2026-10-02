@@ -23,6 +23,29 @@ export async function chargeCredits(
   return data === 0 ? "ok" : data === 1 ? "daily" : "period"
 }
 
+// Counts one photo against today's plan limit. Fails open (e.g. before
+// migration 0005 is run) so photo questions never break.
+export async function chargePhoto(user: AppUser): Promise<boolean> {
+  const { data, error } = await getSupabase().rpc("use_photo", {
+    p_user: user.id,
+    p_day: istDay(),
+    p_limit: PLANS[user.plan].photosDaily,
+  })
+  if (error) {
+    console.error("chargePhoto failed:", error)
+    return true
+  }
+  return data !== false
+}
+
+export async function refundPhoto(userId: string) {
+  const { error } = await getSupabase().rpc("refund_photo", {
+    p_user: userId,
+    p_day: istDay(),
+  })
+  if (error) console.error("refundPhoto failed:", error)
+}
+
 // Tokens after a reply; negative credits = refund after an error.
 export async function recordUsage(
   userId: string,

@@ -26,6 +26,7 @@ export const te = {
     users: "యూజర్లు",
     aiSettings: "AI సెట్టింగ్స్",
     myProfile: "నా ప్రొఫైల్",
+    logout: "లాగ్ అవుట్",
     menu: "మెనూ",
     username: "యూజర్‌నేమ్",
     password: "పాస్‌వర్డ్",
@@ -52,7 +53,8 @@ export const te = {
     searching: "ANGRAU / ICAR లో వెతుకుతోంది…",
     genericError: "క్షమించండి, సమస్య వచ్చింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
     micDenied: "మైక్రోఫోన్ అనుమతి ఇవ్వండి.",
-    micNoSpeech: "మాట వినపడలేదు. మళ్లీ ప్రయత్నించండి.",
+    micNoSpeech:
+      "మీ మాట సరిగ్గా అర్థం కాలేదు. దయచేసి నెమ్మదిగా, స్పష్టంగా మళ్లీ చెప్పండి. అప్పుడు సరైన సమాచారం ఇస్తాను.",
     micBroken: "మైక్ పనిచేయడం లేదు. టైప్ చేయండి.",
     clearChat: "చాట్ తొలగించు",
     clearTitle: "చాట్ మొత్తం తొలగించాలా?",
@@ -61,6 +63,8 @@ export const te = {
     theme: "లైట్ / డార్క్",
     cropPhoto: "పంట ఫోటో",
     photoLimit: "ఒక ఫోటో మాత్రమే (10MB లోపు) పంపండి.",
+    askedToday:
+      "ఈ ప్రశ్న ఈ రోజు ఇప్పటికే అడిగారు. వేరే వ్యవసాయ సమస్య ఉంటే అడగండి.",
     selectedPhoto: "ఎంచుకున్న ఫోటో",
     removePhoto: "ఫోటో తొలగించు",
     placeholderTranslit: "ఇంగ్లీష్‌లో టైప్ చేయండి (mirchi → మిర్చి)",
@@ -227,6 +231,7 @@ export const en: Dictionary = {
     users: "Users",
     aiSettings: "AI settings",
     myProfile: "My profile",
+    logout: "Log out",
     menu: "Menu",
     username: "Username",
     password: "Password",
@@ -253,7 +258,8 @@ export const en: Dictionary = {
     searching: "Searching ANGRAU / ICAR…",
     genericError: "Sorry, something went wrong. Please try again.",
     micDenied: "Please allow microphone access.",
-    micNoSpeech: "Couldn't hear you. Please try again.",
+    micNoSpeech:
+      "I couldn't understand your voice clearly. Please speak slowly and clearly again, so I can give you the right information.",
     micBroken: "Microphone isn't working. Please type instead.",
     clearChat: "Clear chat",
     clearTitle: "Clear the whole chat?",
@@ -262,6 +268,8 @@ export const en: Dictionary = {
     theme: "Light / Dark",
     cropPhoto: "Crop photo",
     photoLimit: "Send only one photo (under 10MB).",
+    askedToday:
+      "You already asked this question today. Ask me about any other farming problem.",
     selectedPhoto: "Selected photo",
     removePhoto: "Remove photo",
     placeholderTranslit: "Type in English letters (mirchi → మిర్చి)",
