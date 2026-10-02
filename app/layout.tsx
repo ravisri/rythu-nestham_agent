@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next"
-import { Geist_Mono, Noto_Sans_Telugu } from "next/font/google"
+import { Geist_Mono, Noto_Sans_Telugu, Geist } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -7,6 +7,9 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { I18nProvider } from "@/lib/i18n/client"
 import { getLocale } from "@/lib/i18n/server"
 import { cn } from "@/lib/utils"
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+
 
 // Applied via className on the body element (not the --font-sans token) so switching
 // shadcn presets, which rewrite globals.css, can never break Telugu rendering.
@@ -45,7 +48,7 @@ export default async function RootLayout({
     <html
       lang={locale}
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable)}
+      className={cn("antialiased", fontMono.variable, "font-sans", geist.variable)}
     >
       <body className={fontTelugu.className}>
         <ThemeProvider>
