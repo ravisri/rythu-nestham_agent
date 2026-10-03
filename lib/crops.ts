@@ -2,6 +2,7 @@
 // "general" = advice that applies to all crops (soil, organic farming, biocontrol, ...).
 export const CROPS = {
   general: "సాధారణ",
+  organic: "సేంద్రీయ", // organic inputs for all crops (data/pdfs/organic)
   paddy: "వరి",
   maize: "మొక్కజొన్న",
   sorghum: "జొన్న",
@@ -69,7 +70,13 @@ export function toCrop(name: string | undefined): Crop | undefined {
 }
 
 // Group slugs: never picked from a question (too broad to filter on).
-const GROUPS = new Set<Crop>(["general", "pulses", "oilseeds", "trees"])
+const GROUPS = new Set<Crop>([
+  "general",
+  "organic",
+  "pulses",
+  "oilseeds",
+  "trees",
+])
 
 // Common spellings farmers use beside the CROPS names.
 const TELUGU_ALIASES: Record<string, Crop> = {

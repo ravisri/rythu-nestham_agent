@@ -38,7 +38,8 @@ const EXAMPLES: { icon: LucideIcon; text: string }[] = [
   },
   {
     icon: DropletsIcon,
-    text: "తక్కువ ఖర్చుతో వేప నూనె ద్రావణం ఎలా తయారు చేసి పిచికారీ చేయాలి?",
+    // Covered by data/pdfs/organic (నీమాస్త్రం = neem-based organic pesticide).
+    text: "నీమాస్త్రం (వేప కషాయం) తక్కువ ఖర్చుతో ఎలా తయారు చేసి పిచికారీ చేయాలి?",
   },
 ]
 

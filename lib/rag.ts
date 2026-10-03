@@ -74,14 +74,14 @@ async function match(embedding: number[], crops: string[] | null) {
   return rows.filter((row) => row.similarity >= best - MAX_GAP)
 }
 
-// With a known crop, only that crop's text plus general advice is searched;
+// With a known crop, only that crop's text plus general and organic advice is searched;
 // if that finds nothing, all crops are searched (same embedding).
 export async function searchKnowledge(query: string, crop?: Crop) {
   try {
     const embedding = await embedQuery(query)
     let rows =
       crop && crop !== "general"
-        ? await match(embedding, [crop, "general"])
+        ? await match(embedding, [crop, "general", "organic"])
         : []
     if (rows.length === 0) rows = await match(embedding, null)
 
