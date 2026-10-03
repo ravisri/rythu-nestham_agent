@@ -65,6 +65,7 @@ import {
   saveChat,
   wasAskedToday,
 } from "@/lib/chat-history"
+import { checkText, GUARD_MESSAGES } from "@/lib/guardrails"
 import { compressImage } from "@/lib/image"
 import { splitSuggestions } from "@/lib/suggestions"
 import { GUEST, MESSAGES, type Usage } from "@/lib/plans"
@@ -245,6 +246,35 @@ function ChatInner({
     }
   }, [messages, loadedCount])
 
+  // Guardrail refusals are alerts, not chat turns: drop the unanswered
+  // question and put its text back in the box to fix.
+  useEffect(() => {
+    if (!error || !GUARD_MESSAGES.includes(error.message)) return
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage?.role === "user") {
+      setMessages(messages.slice(0, -1))
+      controller.textInput.setInput(textOf(lastMessage))
+    }
+    if (canSpeak) speak("guard", error.message)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error])
+
+  // Not a farm photo: the model's fixed reply becomes an alert (credit refunded).
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (
+      status !== "ready" ||
+      messages.length <= loadedCount ||
+      lastMessage?.role !== "assistant" ||
+      !textOf(lastMessage).includes(MESSAGES.notAgriImage)
+    )
+      return
+    setMessages(messages.slice(0, -2))
+    setNotice(MESSAGES.notAgriImage)
+    if (canSpeak) speak("guard", MESSAGES.notAgriImage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, messages])
+
   // Limit reached -> 0 left; signed in on another phone -> back to login.
   useEffect(() => {
     const limits: string[] = [
@@ -269,6 +299,13 @@ function ChatInner({
     const typed = teluguTyping
       ? transliterateText(text.trim(), lexicon)
       : text.trim()
+    // Guardrail: wrong text is refused right here (no network, no credit).
+    const guard = checkText(typed)
+    if (guard) {
+      setNotice(guard)
+      if (canSpeak) speak("guard", guard)
+      return
+    }
     // Same text question already answered today: no API call, no credit.
     if (files.length === 0 && wasAskedToday(userId, typed)) {
       setInfo(t.chat.askedToday)
@@ -345,7 +382,14 @@ function ChatInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mic.error])
 
-  function handleSubmit(message: PromptInputMessage) {
+  async function handleSubmit(message: PromptInputMessage) {
+    // Throwing keeps the typed text (and photo) in the box to fix.
+    const guard = checkText(message.text)
+    if (guard) {
+      setNotice(guard)
+      if (canSpeak) speak("guard", guard)
+      throw new Error(guard)
+    }
     return send(message.text, message.files)
   }
 

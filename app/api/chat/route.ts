@@ -9,6 +9,7 @@ import {
 } from "ai"
 import { z } from "zod"
 import { isImproper, looksAgricultural } from "@/lib/agri-topic"
+import { checkImages, checkText } from "@/lib/guardrails"
 import { answerModel, reasoningOptions } from "@/lib/ai"
 import { getAiSettings } from "@/lib/ai-settings"
 import {
@@ -324,6 +325,13 @@ export async function POST(req: Request) {
   const question = textOf(last)
   const hasImage = last.parts.some((p) => p.type === "file")
 
+  // Guardrails: abusive / injection / too-long text and bad uploads are
+  // refused before any search, charge or model call (shown as an alert).
+  const blocked =
+    checkText(question) ??
+    checkImages(last.parts.flatMap((p) => (p.type === "file" ? [p] : [])))
+  if (blocked) return reply(422, blocked)
+
   if (user) await renewSession()
 
   // Off-topic / improper text questions and questions we have no data for are
@@ -336,7 +344,7 @@ export async function POST(req: Request) {
       ? searchQuery(window, question)
       : ""
   if (!hasImage && (isImproper(question) || !looksAgricultural(query))) {
-    return quickReply(MESSAGES.notAgri, await meter.left())
+    return reply(422, MESSAGES.notAgri) // alert, no credit
   }
   const search = query
     ? await searchKnowledge(query, hasImage ? undefined : cropFromText(query))
