@@ -13,6 +13,8 @@ export type AiSettings = {
   guestModel?: string
   // Optional daily token budget for all guests together; empty = no limit.
   guestDailyTokens?: number
+  // Gemini model used with users' own keys (model name only; always google).
+  byokModel?: string
   compatBaseUrl?: string
   apiKeys: Partial<Record<AiProvider, string>>
   // Saved keys that could not be decrypted (AI_SETTINGS_SECRET changed).
@@ -24,6 +26,7 @@ export type AiSettingsRow = {
   ocr_model: string | null
   guest_model?: string | null // migration 0007
   guest_daily_tokens?: number | null
+  byok_model?: string | null // migration 0009
   compat_base_url: string | null
   api_keys: Partial<Record<AiProvider, string>> | null
 }
@@ -62,6 +65,7 @@ async function load(): Promise<AiSettings> {
       ocrModel: row.ocr_model ?? undefined,
       guestModel: row.guest_model ?? undefined,
       guestDailyTokens: row.guest_daily_tokens ?? undefined,
+      byokModel: row.byok_model ?? undefined,
       compatBaseUrl: row.compat_base_url ?? undefined,
       apiKeys,
       unreadable,

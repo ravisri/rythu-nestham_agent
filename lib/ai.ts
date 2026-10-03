@@ -93,6 +93,24 @@ export async function chatModel() {
   return languageModel(modelIds(settings).chat, settings)
 }
 
+// Gemini model for users' own keys: admin setting, else the chat model if it
+// is a Google model, else a safe default. Always "google:<model>".
+export function byokModelId(settings: AiSettings): string {
+  if (settings.byokModel) return `google:${settings.byokModel}`
+  const chat = modelIds(settings).chat
+  return chat.startsWith("google:") ? chat : "google:gemini-2.5-flash"
+}
+
+// Answer model on the user's own Google key (never another provider).
+export async function byokAnswerModel(apiKey: string) {
+  const settings = await getAiSettings()
+  const id = byokModelId(settings)
+  return {
+    id,
+    model: languageModel(id, { apiKeys: { google: apiKey } }),
+  }
+}
+
 // Chat model for an audience: guests get the (free) guest model. The id is
 // returned too, for token tracking.
 export async function answerModel(guest: boolean) {

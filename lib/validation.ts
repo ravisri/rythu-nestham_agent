@@ -68,7 +68,10 @@ export const resetSchema = z
     recoveryCode: z
       .string()
       .trim()
-      .refine((v) => v === "" || /^\d{6}$/.test(v), "6 అంకెల రికవరీ కోడ్ ఇవ్వండి"),
+      .refine(
+        (v) => v === "" || /^\d{6}$/.test(v),
+        "6 అంకెల రికవరీ కోడ్ ఇవ్వండి"
+      ),
     password,
     confirm: z.string(),
   })
@@ -89,7 +92,10 @@ export const adminPlanSchema = z.object({
   // yyyy-mm-dd; trial -> trial end date, pro plans -> plan expiry ("" = no expiry)
   expiresOn: z
     .string()
-    .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), "సరైన తేదీ ఇవ్వండి"),
+    .refine(
+      (v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v),
+      "సరైన తేదీ ఇవ్వండి"
+    ),
 })
 
 export const adminPasswordSchema = z.object({ userId: z.uuid(), password })
@@ -120,6 +126,9 @@ export const aiSettingsSchema = z
     ocrModel: modelName,
     guestProvider: aiProvider,
     guestModel: modelName,
+    // Users' own keys: always Google (Gemini); the admin picks the model.
+    byokProvider: z.literal("google"),
+    byokModel: modelName,
     // "" = no daily guest token limit.
     guestDailyTokens: z
       .string()
@@ -160,3 +169,15 @@ export type AdminPasswordValues = z.input<typeof adminPasswordSchema>
 export type AdminUserIdValues = z.input<typeof adminUserIdSchema>
 export type AiSettingsValues = z.input<typeof aiSettingsSchema>
 export type AiTestValues = z.input<typeof aiTestSchema>
+
+// A user's own Google AI Studio key (Gemini only).
+export const userApiKeySchema = z.object({
+  apiKey: z
+    .string()
+    .trim()
+    .regex(
+      /^AIza[0-9A-Za-z_-]{30,60}$/,
+      "సరైన Google API కీ ఇవ్వండి (AIza తో మొదలవుతుంది)"
+    ),
+})
+export type UserApiKeyValues = z.input<typeof userApiKeySchema>

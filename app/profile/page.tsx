@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import type { ReactNode } from "react"
 import { LanguageToggle } from "@/components/language-toggle"
 import { PageHeader, PageShell } from "@/components/page-header"
+import { ApiKeyCard } from "@/components/profile/api-key-card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,6 +21,11 @@ import { getDictionary } from "@/lib/i18n/server"
 import { formatIstDate, PLAN_STATUS, PLANS, planStatus } from "@/lib/plans"
 import { getSupabase } from "@/lib/supabase"
 import { usageSummary, usedCredits } from "@/lib/usage"
+import { byokModelId } from "@/lib/ai"
+import { getAiSettings } from "@/lib/ai-settings"
+import { hasPeriodLimit } from "@/lib/plans"
+import { mask } from "@/lib/secrets"
+import { getUserGoogleKey } from "@/lib/user-keys"
 
 // Used / limit with a bar (same numbers as before).
 function Meter({
@@ -59,7 +65,7 @@ export default async function ProfilePage() {
   const { locale, t } = await getDictionary()
 
   // Only the non-secret created_at; USER_COLUMNS already covers the rest.
-  const [used, summary, created] = await Promise.all([
+  const [used, summary, created, ownKey, aiSettings] = await Promise.all([
     usedCredits([user]).then((m) => m.get(user.id)!),
     usageSummary(user),
     getSupabase()
@@ -68,6 +74,8 @@ export default async function ProfilePage() {
       .eq("id", user.id)
       .single()
       .then(({ data }) => (data?.created_at as string | undefined) ?? null),
+    getUserGoogleKey(user.id),
+    getAiSettings(),
   ])
 
   const plan = PLANS[user.plan]
@@ -133,7 +141,7 @@ export default async function ProfilePage() {
               </Row>
               <Row label={p.perDay}>{plan.daily}</Row>
               <Row label={plan.perMonth ? p.perMonth : p.perTrial}>
-                {plan.period}
+                {hasPeriodLimit(user.plan) ? plan.period : t.common.unlimited}
               </Row>
               <Row label={p.cost}>{p.costValue}</Row>
             </dl>
@@ -146,11 +154,13 @@ export default async function ProfilePage() {
           </CardHeader>
           <CardContent>
             <Meter label={p.usedToday} used={used.today} limit={plan.daily} />
-            <Meter
-              label={plan.perMonth ? p.usedMonth : p.usedTrial}
-              used={used.period}
-              limit={plan.period}
-            />
+            {hasPeriodLimit(user.plan) && (
+              <Meter
+                label={plan.perMonth ? p.usedMonth : p.usedTrial}
+                used={used.period}
+                limit={plan.period}
+              />
+            )}
             <div className="mt-2 flex items-center justify-between gap-4 rounded-xl bg-primary/10 px-4 py-3">
               <span className="font-medium">{p.leftToday}</span>
               <span className="text-2xl font-bold text-primary tabular-nums">
@@ -159,6 +169,11 @@ export default async function ProfilePage() {
             </div>
           </CardContent>
         </Card>
+
+        <ApiKeyCard
+          masked={ownKey ? mask(ownKey) : undefined}
+          model={byokModelId(aiSettings).replace("google:", "")}
+        />
 
         <Card className="shadow-sm">
           <CardHeader>

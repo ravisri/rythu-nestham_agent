@@ -1,4 +1,5 @@
 import {
+  APICallError,
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -10,7 +11,9 @@ import {
 import { z } from "zod"
 import { isImproper, looksAgricultural } from "@/lib/agri-topic"
 import { checkImages, checkText } from "@/lib/guardrails"
-import { answerModel, reasoningOptions } from "@/lib/ai"
+import { answerModel, byokAnswerModel, reasoningOptions } from "@/lib/ai"
+import { chargeByok, getUserGoogleKey, refundByok } from "@/lib/user-keys"
+import { isQuotaError } from "@/lib/token-usage"
 import { getAiSettings } from "@/lib/ai-settings"
 import {
   getCurrentUser,
@@ -160,6 +163,21 @@ function searchQuery(window: UIMessage[], question: string): string {
   return [previous && textOf(previous), question].filter(Boolean).join(" ")
 }
 
+// Errors on the user's own key: tell them what to fix (no fallback to ours).
+function ownKeyError(error: unknown): string {
+  if (isQuotaError(error)) return MESSAGES.byokQuota
+  const status = APICallError.isInstance(error) ? error.statusCode : undefined
+  if (
+    status === 400 ||
+    status === 401 ||
+    status === 403 ||
+    /api.?key/i.test(String(error))
+  ) {
+    return MESSAGES.byokInvalid
+  }
+  return friendlyError(error)
+}
+
 function friendlyError(error: unknown): string {
   const text = String(error)
   if (
@@ -232,17 +250,32 @@ type Meter = {
   // "Next question" suggestions left today / count one that was shown.
   suggestionsLeft: () => Promise<number>
   addSuggestion: () => Promise<void>
+  // Set after charge() when this question runs on the user's own Google key.
+  ownKey?: () => string | undefined
 }
 
 function userMeter(user: AppUser): Meter {
   let cost = 0
   let photo = false
+  let ownKey: string | undefined // app quota used up: the user's own key
+
+  // App quota used up: continue on the user's own Google key (no credits).
+  async function useOwnKey(limitReply: Response): Promise<Response | null> {
+    const key = await getUserGoogleKey(user.id)
+    if (!key) return limitReply
+    if (!(await chargeByok(user.id))) return reply(429, MESSAGES.byokLimit)
+    ownKey = key
+    cost = 0
+    photo = false
+    return null
+  }
+
   return {
     left: async () => (await usageSummary(user)).left,
     charge: async (hasImage) => {
       // Photos cost the most tokens: limited per plan per day.
       if (hasImage && !(await chargePhoto(user))) {
-        return reply(429, MESSAGES.photoLimit)
+        return useOwnKey(reply(429, MESSAGES.photoLimit))
       }
       photo = hasImage
       cost = creditCost(hasImage)
@@ -250,16 +283,21 @@ function userMeter(user: AppUser): Meter {
       if (charged === "ok") return null
       if (photo) await refundPhoto(user.id)
       const trial = user.plan === "trial" && charged === "period"
-      return reply(429, trial ? MESSAGES.trialLimit : LIMIT_MESSAGE[charged])
+      return useOwnKey(
+        reply(429, trial ? MESSAGES.trialLimit : LIMIT_MESSAGE[charged])
+      )
     },
     settle: async (noAnswer, tokensIn, tokensOut) => {
+      if (noAnswer && ownKey) await refundByok(user.id)
       if (noAnswer && photo) await refundPhoto(user.id)
       await recordUsage(user.id, noAnswer ? -cost : 0, tokensIn, tokensOut)
     },
     refund: async () => {
+      if (ownKey) return refundByok(user.id)
       if (photo) await refundPhoto(user.id)
       await recordUsage(user.id, -cost)
     },
+    ownKey: () => ownKey,
     suggestionsLeft: () => userSuggestionsLeft(user),
     addSuggestion: () => addUserSuggestion(user.id),
   }
@@ -362,7 +400,12 @@ export async function POST(req: Request) {
   ])
 
   // Guests use the admin's (free) guest model; users the chat model.
-  const { id: modelId, model } = await answerModel(!user)
+  // Own key: the admin's Gemini model on the user's key (never our key).
+  const ownKey = meter.ownKey?.()
+  const { id: baseId, model } = ownKey
+    ? await byokAnswerModel(ownKey)
+    : await answerModel(!user)
+  const modelId = ownKey ? `byok:${baseId}` : baseId
   const result = streamText({
     model,
     system: systemPrompt(results, hasImage, suggestionsLeft > 0),
@@ -402,7 +445,7 @@ export async function POST(req: Request) {
   })
 
   return result.toUIMessageStreamResponse({
-    onError: friendlyError,
+    onError: (error) => (ownKey ? ownKeyError(error) : friendlyError(error)),
     // Credits left (header badge) + sources of the pre-searched reference.
     messageMetadata: ({ part }) =>
       part.type === "start"

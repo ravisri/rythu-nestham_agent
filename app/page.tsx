@@ -3,6 +3,7 @@ import { Chat } from "@/components/chat/chat"
 import { getCurrentUser, getGuestId, hasSessionCookie } from "@/lib/auth"
 import { guestLeft } from "@/lib/guest"
 import { usageSummary } from "@/lib/usage"
+import { getUserGoogleKey } from "@/lib/user-keys"
 
 export default async function Page() {
   const user = await getCurrentUser()
@@ -32,6 +33,7 @@ export default async function Page() {
       username={user.username}
       isAdmin={user.role === "admin"}
       usage={await usageSummary(user)}
+      hasOwnKey={!!(await getUserGoogleKey(user.id))}
     />
   )
 }

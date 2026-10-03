@@ -27,6 +27,7 @@ export const te = {
     users: "యూజర్లు",
     aiSettings: "AI సెట్టింగ్స్",
     myProfile: "నా ప్రొఫైల్",
+    unlimited: "అపరిమితం",
     logout: "లాగ్ అవుట్",
     menu: "మెనూ",
     username: "యూజర్‌నేమ్",
@@ -119,6 +120,35 @@ export const te = {
     quotaTitle: "మోడల్ కోటా / పరిమితి అయిపోయింది",
     quotaLine: (n: number, at: string) => `ఈరోజు ${n} సార్లు కోటా లోపం (చివరిది ${at})`,
     quotaHint: "AI సెట్టింగ్స్‌లో వేరే ఉచిత లేదా పెయిడ్ మోడల్‌కు మార్చండి.",
+  },
+  byok: {
+    title: "నా Google API కీ",
+    hint: "రోజువారీ ఉచిత ప్రశ్నలు అయిపోయాక, మీ సొంత ఉచిత Google కీతో ఇంకా ప్రశ్నలు అడగవచ్చు.",
+    stepsTitle: "కీ ఎలా తీసుకోవాలి (2 నిమిషాలు):",
+    steps: [
+      "aistudio.google.com తెరవండి (కింద బటన్ నొక్కండి)",
+      "మీ Gmail తో లాగిన్ అవ్వండి",
+      "\"Get API key\" నొక్కండి",
+      "\"Create API key\" నొక్కండి",
+      "వచ్చిన కీని కాపీ చేయండి (AIza తో మొదలవుతుంది)",
+      "ఇక్కడ పేస్ట్ చేసి \"సేవ్\" నొక్కండి",
+    ],
+    openStudio: "Google AI Studio తెరవండి",
+    warnTitle: "జాగ్రత్త",
+    warnBody:
+      "ఉచిత పరిమితిలోనే వాడండి — Google Cloud లో Billing ఆన్ చేయకండి, లేకపోతే డబ్బులు కట్ అవ్వొచ్చు. ఉచిత కీతో పంపిన ప్రశ్నలను Google వాడవచ్చు. మీ కీని ఎప్పుడైనా తొలగించవచ్చు.",
+    label: "Google API కీ",
+    placeholder: "AIza...",
+    save: "పరీక్షించి సేవ్ చేయండి",
+    saved: "కీ సేవ్ అయింది ✓",
+    current: "సేవ్ చేసిన కీ",
+    remove: "కీ తొలగించు",
+    model: "వాడే మోడల్ (అడ్మిన్ ఎంచుకున్నది)",
+    perDay: (n: number) => `రోజువారీ ఉచిత ప్రశ్నలు అయిపోయాక, మీ కీతో రోజుకు ${n} వరకు`,
+    badge: "మీ కీ",
+    cardTitle: "మీ సొంత Google కీ జోడించండి (ఉచితం)",
+    cardBody: "ఈరోజు ఉచిత ప్రశ్నలు అయిపోయాయి. 2 నిమిషాల్లో మీ ఉచిత Google కీ జోడించి ఇంకా అడగండి.",
+    cardButton: "కీ జోడించండి",
   },
   pwa: {
     title: "రైతు నేస్తం యాప్‌ను ఇన్‌స్టాల్ చేయండి",
@@ -267,6 +297,9 @@ export const te = {
     guestTitle: "గెస్ట్ మోడల్ (లాగిన్ లేని వారికి)",
     guestHint:
       "అతిథుల ప్రశ్నలకు వాడే మోడల్ — ఉచిత మోడల్ ఎంచుకోండి. కోటా అయిపోతే /admin/usage లో హెచ్చరిక వస్తుంది, అప్పుడు ఇక్కడ మార్చండి.",
+    byokTitle: "యూజర్ సొంత కీ మోడల్ (Gemini మాత్రమే)",
+    byokHint:
+      "ఉచిత ప్రశ్నలు అయిపోయాక యూజర్లు తమ Google కీ ఇస్తే, ఈ మోడల్‌తో జవాబు వస్తుంది. యూజర్లు మోడల్ మార్చలేరు — ఉచిత పరిమితి ఉన్న Flash మోడల్ ఎంచుకోండి.",
     guestBudgetTitle: "అతిథుల రోజువారీ టోకెన్ పరిమితి",
     guestBudgetHint:
       "అందరు అతిథులు కలిపి రోజుకు వాడగల టోకెన్లు. దాటితే అతిథులకు ఖాతా తెరవమని చూపిస్తుంది. ఖాళీ = పరిమితి లేదు.",
@@ -305,6 +338,7 @@ export const en: Dictionary = {
     users: "Users",
     aiSettings: "AI settings",
     myProfile: "My profile",
+    unlimited: "Unlimited",
     logout: "Log out",
     menu: "Menu",
     username: "Username",
@@ -397,6 +431,35 @@ export const en: Dictionary = {
     quotaTitle: "Model quota / rate limit reached",
     quotaLine: (n: number, at: string) => `${n} quota errors today (last at ${at})`,
     quotaHint: "Switch to another free or paid model in AI settings.",
+  },
+  byok: {
+    title: "My Google API key",
+    hint: "After your free daily questions, keep asking with your own free Google key.",
+    stepsTitle: "How to get a key (2 minutes):",
+    steps: [
+      "Open aistudio.google.com (button below)",
+      "Sign in with your Gmail",
+      "Tap \"Get API key\"",
+      "Tap \"Create API key\"",
+      "Copy the key (starts with AIza)",
+      "Paste it here and tap \"Save\"",
+    ],
+    openStudio: "Open Google AI Studio",
+    warnTitle: "Careful",
+    warnBody:
+      "Stay on the free tier — don't turn on Billing in Google Cloud, or you may be charged. Google may use prompts sent with free keys. You can delete your key anytime.",
+    label: "Google API key",
+    placeholder: "AIza...",
+    save: "Test & save",
+    saved: "Key saved ✓",
+    current: "Saved key",
+    remove: "Delete key",
+    model: "Model used (chosen by admin)",
+    perDay: (n: number) => `After your free daily questions, up to ${n} a day with your key`,
+    badge: "Your key",
+    cardTitle: "Add your own Google key (free)",
+    cardBody: "Today's free questions are used up. Add your free Google key in 2 minutes and keep asking.",
+    cardButton: "Add key",
   },
   pwa: {
     title: "Install the Rythu Nestham app",
@@ -544,6 +607,9 @@ export const en: Dictionary = {
     guestTitle: "Guest model (not logged in)",
     guestHint:
       "Model for guest questions — pick a free model. If its quota runs out you'll see an alert on /admin/usage; change it here.",
+    byokTitle: "Users' own-key model (Gemini only)",
+    byokHint:
+      "When users add their own Google key after the free questions, answers use this model. Users can't change it — pick a Flash model that has a free tier.",
     guestBudgetTitle: "Daily guest token budget",
     guestBudgetHint:
       "Tokens all guests together may use per day. Once reached, guests are asked to sign up. Empty = no limit.",
@@ -605,9 +671,16 @@ const EN_MESSAGES: Record<string, string> = {
   "ఈ యూజర్‌నేమ్ ఇప్పటికే ఉంది.": "This username is taken.",
   "ai_settings టేబుల్ లేదు. supabase/migrations/0004_ai_settings.sql రన్ చేయండి.":
     "Table ai_settings is missing. Run supabase/migrations/0004_ai_settings.sql.",
-  "గెస్ట్ మోడల్ కాలమ్స్ లేవు. supabase/migrations/0007_token_tracking.sql రన్ చేయండి.":
-    "Guest model columns are missing. Run supabase/migrations/0007_token_tracking.sql.",
+  "కొత్త మోడల్ కాలమ్స్ లేవు. supabase/migrations/0007 మరియు 0009 రన్ చేయండి.":
+    "New model columns are missing. Run supabase/migrations 0007 and 0009.",
   "అంకెలు మాత్రమే ఇవ్వండి": "Enter numbers only",
+  "మళ్లీ లాగిన్ అవ్వండి.": "Please log in again.",
+  "ఈ API కీ పని చేయడం లేదు. సరిగ్గా కాపీ చేశారో చూడండి.":
+    "This API key doesn't work. Check that you copied it correctly.",
+  "user_api_keys టేబుల్ లేదు. supabase/migrations/0009_user_api_keys.sql రన్ చేయండి.":
+    "Table user_api_keys is missing. Run supabase/migrations/0009_user_api_keys.sql.",
+  "సరైన Google API కీ ఇవ్వండి (AIza తో మొదలవుతుంది)":
+    "Enter a valid Google API key (starts with AIza)",
   "API కీ సరైనది కాదు లేదా ఇవ్వలేదు.": "API key is wrong or missing.",
   "ఈ మోడల్ పేరు తప్పు లేదా ఈ కీకి అందుబాటులో లేదు.":
     "Model name is wrong or not available for this key.",

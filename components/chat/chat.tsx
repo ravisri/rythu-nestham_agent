@@ -76,6 +76,7 @@ import {
   transliterateText,
 } from "@/lib/telugu-translit"
 import { GuestSignupCard } from "./guest-signup-card"
+import { OwnKeyCard } from "./own-key-card"
 import { ListeningCard } from "./listening-card"
 import { Actions, Sources } from "./message-extras"
 import { NextQuestions } from "./next-questions"
@@ -168,6 +169,8 @@ function progressLabel(last: UIMessage | undefined, t: Dictionary): string {
 type ChatProps = {
   // Not logged in: a few free questions a day, then a sign-up card.
   guest?: boolean
+  // Logged-in user saved their own Google key (used after the free quota).
+  hasOwnKey?: boolean
   userId: string
   username: string
   isAdmin: boolean
@@ -176,6 +179,7 @@ type ChatProps = {
 
 function ChatInner({
   guest = false,
+  hasOwnKey = false,
   userId,
   username,
   isAdmin,
@@ -220,6 +224,19 @@ function ChatInner({
   // Guest used today's free questions: show the sign-up card, block input.
   const guestOut =
     guest && (left === 0 || error?.message === MESSAGES.guestLimit)
+  // Free quota used up and no own key yet: offer to add one.
+  const offerOwnKey =
+    !guest &&
+    !hasOwnKey &&
+    !!error &&
+    (
+      [
+        MESSAGES.dailyLimit,
+        MESSAGES.periodLimit,
+        MESSAGES.trialLimit,
+        MESSAGES.photoLimit,
+      ] as string[]
+    ).includes(error.message)
 
   useEffect(() => {
     try {
@@ -464,8 +481,16 @@ function ChatInner({
               >
                 {t.plans[usage.plan]}
               </Badge>
-              <CoinsIcon className="size-3.5 shrink-0" />
-              <span className="truncate">{t.chat.left(left)}</span>
+              {left === 0 && hasOwnKey ? (
+                <Badge variant="outline" className="shrink-0">
+                  🔑 {t.byok.badge}
+                </Badge>
+              ) : (
+                <>
+                  <CoinsIcon className="size-3.5 shrink-0" />
+                  <span className="truncate">{t.chat.left(left)}</span>
+                </>
+              )}
             </div>
           ) : (
             <Badge variant="destructive" className="mt-0.5">
@@ -640,6 +665,7 @@ function ChatInner({
           </Alert>
         )}
         {guestOut && <GuestSignupCard />}
+        {offerOwnKey && <OwnKeyCard />}
         {mic.listening && (
           <ListeningCard
             transcript={controller.textInput.value}

@@ -3,11 +3,14 @@
 // photosDaily: photo questions per IST day (photos cost the most tokens).
 // suggestionsDaily: times per day the AI adds 2 "next question" suggestions.
 
+// "No total limit" (trial): only the daily limit applies.
+export const NO_LIMIT = 1_000_000
+
 export const PLANS = {
   // Labels: lib/i18n/dictionaries.ts (plans.*)
   trial: {
-    daily: 5,
-    period: 50,
+    daily: 15,
+    period: NO_LIMIT,
     perMonth: false,
     photosDaily: 2,
     suggestionsDaily: 5,
@@ -29,6 +32,11 @@ export const PLANS = {
 } as const
 
 export type Plan = keyof typeof PLANS
+
+export const hasPeriodLimit = (plan: Plan) => PLANS[plan].period < NO_LIMIT
+
+// After the app's quota: questions per day on the user's own Google key.
+export const BYOK = { daily: 100 } as const
 
 // Not logged in: questions per IST day (photos count as questions), plus a
 // per-IP cap so clearing cookies doesn't give unlimited questions.
@@ -103,6 +111,10 @@ export const MESSAGES = {
     "ఈ సందేశం అనుచితంగా ఉంది. దయచేసి వ్యవసాయానికి సంబంధించిన ప్రశ్న మాత్రమే మర్యాదగా అడగండి.",
   tooLong: "ప్రశ్న చాలా పెద్దగా ఉంది. 600 అక్షరాల లోపు చిన్నగా అడగండి.",
   badImage: "ఈ ఫైల్ సరైన ఫోటో కాదు. ఒక పంట ఫోటో (JPG / PNG) మాత్రమే పంపండి.",
+  byokLimit: "మీ కీతో ఈరోజు పరిమితి అయిపోయింది. రేపు మళ్లీ అడగండి.",
+  byokQuota:
+    "మీ Google కీ ఉచిత పరిమితి అయిపోయింది. కొద్దిసేపటి తర్వాత లేదా రేపు ప్రయత్నించండి.",
+  byokInvalid: "మీ Google API కీ పని చేయడం లేదు. ప్రొఫైల్‌లో కొత్త కీ ఇవ్వండి.",
   guestLimit:
     "ఈరోజు ఉచిత ప్రశ్నలు అయిపోయాయి. ఉచితంగా ఖాతా తెరిచి మరిన్ని ప్రశ్నలు అడగండి.",
   guestPhotoLimit:

@@ -16,7 +16,13 @@ import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { getCurrentUser, USER_COLUMNS, type AppUser } from "@/lib/auth"
 import { getDictionary } from "@/lib/i18n/server"
-import { istDay, PLAN_STATUS, PLANS, planStatus } from "@/lib/plans"
+import {
+  hasPeriodLimit,
+  istDay,
+  PLAN_STATUS,
+  PLANS,
+  planStatus,
+} from "@/lib/plans"
 import { getSupabase } from "@/lib/supabase"
 import { quotaAlerts } from "@/lib/token-usage"
 import { usedCredits } from "@/lib/usage"
@@ -126,14 +132,18 @@ export default async function AdminPage({
                   value={Math.min(100, (used.today / plan.daily) * 100)}
                   aria-label={t.admin.usage(
                     `${used.today}/${plan.daily}`,
-                    `${used.period}/${plan.period}`,
+                    hasPeriodLimit(user.plan)
+                      ? `${used.period}/${plan.period}`
+                      : `${used.period}`,
                     plan.perMonth
                   )}
                 />
                 <p className="text-sm text-muted-foreground">
                   {t.admin.usage(
                     `${used.today}/${plan.daily}`,
-                    `${used.period}/${plan.period}`,
+                    hasPeriodLimit(user.plan)
+                      ? `${used.period}/${plan.period}`
+                      : `${used.period}`,
                     plan.perMonth
                   )}
                 </p>

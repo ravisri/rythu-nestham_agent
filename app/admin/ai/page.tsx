@@ -6,7 +6,7 @@ import {
   type KeyStatus,
 } from "@/components/admin/ai-settings-form"
 import { PageHeader, PageShell } from "@/components/page-header"
-import { modelIds } from "@/lib/ai"
+import { byokModelId, modelIds } from "@/lib/ai"
 import {
   AI_PROVIDERS,
   PROVIDER_ENV_KEYS,
@@ -58,6 +58,7 @@ export default async function AiSettingsPage() {
           ocr={splitModelId(ids.ocr)}
           guest={splitModelId(ids.guest)}
           guestDailyTokens={settings.guestDailyTokens?.toString() ?? ""}
+          byokModel={byokModelId(settings).replace("google:", "")}
           embedding={ids.embedding}
           compatBaseUrl={
             settings.compatBaseUrl ?? process.env.COMPAT_BASE_URL ?? ""

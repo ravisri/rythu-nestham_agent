@@ -58,11 +58,14 @@ function ModelPicker({
   role,
   title,
   description,
+  providers = AI_PROVIDERS,
 }: {
   form: AiForm
-  role: "chat" | "ocr" | "guest"
+  role: "chat" | "ocr" | "guest" | "byok"
   title: string
   description: string
+  // Limit the provider list (users' own keys: Google only).
+  providers?: readonly AiProvider[]
 }) {
   const id = useId()
   const { t } = useI18n()
@@ -96,11 +99,14 @@ function ModelPicker({
                     setCustom(false)
                   }}
                 >
-                  <SelectTrigger id={`${id}-p`} className="h-12 w-full text-base">
+                  <SelectTrigger
+                    id={`${id}-p`}
+                    className="h-12 w-full text-base"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {AI_PROVIDERS.map((p) => (
+                    {providers.map((p) => (
                       <SelectItem key={p} value={p}>
                         {PROVIDER_LABELS[p]}
                       </SelectItem>
@@ -161,7 +167,9 @@ function KeyRow({
 }) {
   const { t, tr } = useI18n()
   const [testing, setTesting] = useState(false)
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(
+    null
+  )
   const clearKeys = useWatch({ control: form.control, name: "clearKeys" })
   const removing = clearKeys.includes(provider)
   const source = SOURCE[status.source]
@@ -231,7 +239,12 @@ function KeyRow({
         />
       )}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" onClick={test} disabled={testing}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={test}
+          disabled={testing}
+        >
           {testing ? <Spinner /> : <PlugZapIcon />}
           {t.ai.test}
         </Button>
@@ -243,7 +256,11 @@ function KeyRow({
         )}
       </div>
       {result && (
-        <p className={result.ok ? "text-sm text-primary" : "text-sm text-destructive"}>
+        <p
+          className={
+            result.ok ? "text-sm text-primary" : "text-sm text-destructive"
+          }
+        >
           {result.ok ? result.text : tr(result.text)}
         </p>
       )}
@@ -256,6 +273,7 @@ export function AiSettingsForm({
   ocr,
   guest,
   guestDailyTokens,
+  byokModel,
   embedding,
   compatBaseUrl,
   keys,
@@ -264,6 +282,7 @@ export function AiSettingsForm({
   ocr: { provider: AiProvider; model: string }
   guest: { provider: AiProvider; model: string }
   guestDailyTokens: string
+  byokModel: string
   embedding: string
   compatBaseUrl: string
   keys: Record<AiProvider, KeyStatus>
@@ -279,6 +298,8 @@ export function AiSettingsForm({
     guestProvider: guest.provider,
     guestModel: guest.model,
     guestDailyTokens,
+    byokProvider: "google",
+    byokModel,
     compatBaseUrl,
     apiKeys: NO_KEYS,
     clearKeys: [],
@@ -314,6 +335,13 @@ export function AiSettingsForm({
         title={t.ai.guestTitle}
         description={t.ai.guestHint}
       />
+      <ModelPicker
+        form={form}
+        role="byok"
+        title={t.ai.byokTitle}
+        description={t.ai.byokHint}
+        providers={["google"]}
+      />
       <Card>
         <CardHeader>
           <CardTitle>{t.ai.guestBudgetTitle}</CardTitle>
@@ -334,9 +362,7 @@ export function AiSettingsForm({
       <Card>
         <CardHeader>
           <CardTitle>{t.ai.keysTitle}</CardTitle>
-          <CardDescription>
-            {t.ai.keysHint}
-          </CardDescription>
+          <CardDescription>{t.ai.keysHint}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {AI_PROVIDERS.map((provider) => (

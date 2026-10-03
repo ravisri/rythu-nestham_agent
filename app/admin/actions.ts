@@ -173,12 +173,14 @@ const isMissingTable = (error: unknown) =>
   /PGRST205|42P01|ai_settings/.test(JSON.stringify(error))
 // Guest model columns missing = migration 0007 not run yet.
 const NO_GUEST_COLUMNS =
-  "గెస్ట్ మోడల్ కాలమ్స్ లేవు. supabase/migrations/0007_token_tracking.sql రన్ చేయండి."
+  "కొత్త మోడల్ కాలమ్స్ లేవు. supabase/migrations/0007 మరియు 0009 రన్ చేయండి."
 const isMissingColumn = (error: unknown) =>
-  /PGRST204|42703|guest_/.test(JSON.stringify(error))
+  /PGRST204|42703|guest_|byok_/.test(JSON.stringify(error))
 
 // Saves models + encrypted API keys. Empty key fields keep the saved key.
-export async function saveAiSettings(values: AiSettingsValues): Promise<Result> {
+export async function saveAiSettings(
+  values: AiSettingsValues
+): Promise<Result> {
   const parsed = aiSettingsSchema.safeParse(values)
   if (!parsed.success) return { ok: false, error: INVALID }
   const d = parsed.data
@@ -206,13 +208,17 @@ export async function saveAiSettings(values: AiSettingsValues): Promise<Result> 
         chat_model: modelId(d.chatProvider, d.chatModel),
         ocr_model: modelId(d.ocrProvider, d.ocrModel),
         guest_model: modelId(d.guestProvider, d.guestModel),
-        guest_daily_tokens: d.guestDailyTokens ? Number(d.guestDailyTokens) : null,
+        guest_daily_tokens: d.guestDailyTokens
+          ? Number(d.guestDailyTokens)
+          : null,
+        byok_model: d.byokModel.replace(/^google:/, ""),
         compat_base_url: d.compatBaseUrl || null,
         api_keys: keys,
         updated_by: me.id,
         updated_at: new Date().toISOString(),
       })
-    if (error && isMissingColumn(error)) return { ok: false, error: NO_GUEST_COLUMNS }
+    if (error && isMissingColumn(error))
+      return { ok: false, error: NO_GUEST_COLUMNS }
     if (error) throw error
     invalidateAiSettings()
     return { ok: true }
@@ -223,7 +229,11 @@ export async function saveAiSettings(values: AiSettingsValues): Promise<Result> 
 function testError(error: unknown): string {
   const status = APICallError.isInstance(error) ? error.statusCode : undefined
   const text = String(error)
-  if (status === 401 || status === 403 || /api.?key|unauthori[sz]ed|permission/i.test(text)) {
+  if (
+    status === 401 ||
+    status === 403 ||
+    /api.?key|unauthori[sz]ed|permission/i.test(text)
+  ) {
     return "API కీ సరైనది కాదు లేదా ఇవ్వలేదు."
   }
   if (status === 404 || /not.?found|does not exist/i.test(text)) {
