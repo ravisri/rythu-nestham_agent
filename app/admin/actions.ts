@@ -171,6 +171,11 @@ const NO_TABLE =
   "ai_settings టేబుల్ లేదు. supabase/migrations/0004_ai_settings.sql రన్ చేయండి."
 const isMissingTable = (error: unknown) =>
   /PGRST205|42P01|ai_settings/.test(JSON.stringify(error))
+// Guest model columns missing = migration 0007 not run yet.
+const NO_GUEST_COLUMNS =
+  "గెస్ట్ మోడల్ కాలమ్స్ లేవు. supabase/migrations/0007_token_tracking.sql రన్ చేయండి."
+const isMissingColumn = (error: unknown) =>
+  /PGRST204|42703|guest_/.test(JSON.stringify(error))
 
 // Saves models + encrypted API keys. Empty key fields keep the saved key.
 export async function saveAiSettings(values: AiSettingsValues): Promise<Result> {
@@ -200,11 +205,14 @@ export async function saveAiSettings(values: AiSettingsValues): Promise<Result> 
         id: 1,
         chat_model: modelId(d.chatProvider, d.chatModel),
         ocr_model: modelId(d.ocrProvider, d.ocrModel),
+        guest_model: modelId(d.guestProvider, d.guestModel),
+        guest_daily_tokens: d.guestDailyTokens ? Number(d.guestDailyTokens) : null,
         compat_base_url: d.compatBaseUrl || null,
         api_keys: keys,
         updated_by: me.id,
         updated_at: new Date().toISOString(),
       })
+    if (error && isMissingColumn(error)) return { ok: false, error: NO_GUEST_COLUMNS }
     if (error) throw error
     invalidateAiSettings()
     return { ok: true }

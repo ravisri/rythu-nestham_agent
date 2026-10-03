@@ -9,7 +9,8 @@ import {
 } from "ai"
 import { z } from "zod"
 import { isImproper, looksAgricultural } from "@/lib/agri-topic"
-import { chatModel, reasoningOptions } from "@/lib/ai"
+import { answerModel, reasoningOptions } from "@/lib/ai"
+import { getAiSettings } from "@/lib/ai-settings"
 import {
   getCurrentUser,
   getGuestId,
@@ -30,6 +31,11 @@ import {
 import { BANNED_PROMPT_LIST } from "@/lib/banned-pesticides"
 import { cropFromText, toCrop } from "@/lib/crops"
 import { searchKnowledge } from "@/lib/rag"
+import {
+  guestTokensToday,
+  recordGuestTokens,
+  recordModelUsage,
+} from "@/lib/token-usage"
 
 export const maxDuration = 30
 
@@ -241,7 +247,8 @@ function guestMeter(guestId: string, ip: string): Meter {
         charged === "photo" ? MESSAGES.guestPhotoLimit : MESSAGES.guestLimit
       )
     },
-    settle: async (noAnswer) => {
+    settle: async (noAnswer, tokensIn, tokensOut) => {
+      await recordGuestTokens(guestId, tokensIn, tokensOut)
       if (noAnswer) await refundGuest(guestId, ip, photo)
     },
     refund: () => refundGuest(guestId, ip, photo),
@@ -263,8 +270,14 @@ export async function POST(req: Request) {
   } else {
     // Signed in on another phone: not a guest, back to login (as before).
     if (await hasSessionCookie()) return reply(401, MESSAGES.sessionEnded)
+    // Admin's optional daily token budget for all guests (free model quota).
+    const budget = (await getAiSettings()).guestDailyTokens
+    if (budget && (await guestTokensToday()) >= budget) {
+      return reply(429, MESSAGES.guestLimit)
+    }
     meter = guestMeter((await getGuestId(true))!, ipKey(req))
   }
+  const audience = user ? "user" : "guest"
 
   const { messages }: { messages: UIMessage[] } = await req.json()
   const window = prune(messages)
@@ -303,7 +316,8 @@ export async function POST(req: Request) {
   if (limited) return limited
   const left = await meter.left()
 
-  const model = await chatModel()
+  // Guests use the admin's (free) guest model; users the chat model.
+  const { id: modelId, model } = await answerModel(!user)
   const result = streamText({
     model,
     system: systemPrompt(results, hasImage),
@@ -318,14 +332,26 @@ export async function POST(req: Request) {
       hasImage
     ),
     // "Not available" / "ask about farming" / not a farm photo is not a real answer: refund it.
-    onFinish: ({ text, totalUsage }) =>
-      meter.settle(
-        NO_ANSWER.some((m) => text.includes(m)),
-        totalUsage.inputTokens ?? 0,
-        totalUsage.outputTokens ?? 0
-      ),
-    // The farmer got no answer: give the credits (and photo) back.
-    onError: () => meter.refund(),
+    onFinish: async ({ text, totalUsage }) => {
+      const tokensIn = totalUsage.inputTokens ?? 0
+      const tokensOut = totalUsage.outputTokens ?? 0
+      await Promise.all([
+        meter.settle(
+          NO_ANSWER.some((m) => text.includes(m)),
+          tokensIn,
+          tokensOut
+        ),
+        recordModelUsage({ model: modelId, audience, tokensIn, tokensOut }),
+      ])
+    },
+    // The farmer got no answer: give the credits (and photo) back. Quota
+    // errors show up as an alert on /admin/usage so the admin can switch models.
+    onError: async ({ error }) => {
+      await Promise.all([
+        meter.refund(),
+        recordModelUsage({ model: modelId, audience, error }),
+      ])
+    },
   })
 
   return result.toUIMessageStreamResponse({

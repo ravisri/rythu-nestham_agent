@@ -118,6 +118,13 @@ export const aiSettingsSchema = z
     chatModel: modelName,
     ocrProvider: aiProvider,
     ocrModel: modelName,
+    guestProvider: aiProvider,
+    guestModel: modelName,
+    // "" = no daily guest token limit.
+    guestDailyTokens: z
+      .string()
+      .trim()
+      .regex(/^d{0,9}$/, "అంకెలు మాత్రమే ఇవ్వండి"),
     compatBaseUrl: baseUrl,
     apiKeys: z.object({
       google: apiKey,
@@ -130,7 +137,9 @@ export const aiSettingsSchema = z
   .refine(
     (d) =>
       d.compatBaseUrl !== "" ||
-      (d.chatProvider !== "compat" && d.ocrProvider !== "compat"),
+      (d.chatProvider !== "compat" &&
+        d.ocrProvider !== "compat" &&
+        d.guestProvider !== "compat"),
     { path: ["compatBaseUrl"], message: "compat కోసం Base URL ఇవ్వండి" }
   )
 

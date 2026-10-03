@@ -64,15 +64,15 @@ export function Welcome({
   return (
     <div className="flex w-full max-w-5xl flex-col gap-5 py-2">
       <InstallBanner />
-      <Card className="relative overflow-hidden border-primary/20 bg-linear-to-br from-primary/15 via-primary/5 to-card shadow-sm">
-        <CardContent className="flex flex-col items-center gap-3 text-center">
+      <Card className="relative overflow-hidden border-primary/20 bg-linear-to-br from-primary/15 via-primary/5 to-card shadow-sm py-3">
+        <CardContent className="flex flex-col items-center gap-2 text-center ">
           <span className="flex size-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
             <SproutIcon className="size-9" />
           </span>
           <h2 className="text-2xl font-bold tracking-tight">
             {t.welcome.hello}
           </h2>
-          <p className="max-w-xl text-base text-muted-foreground">
+          <p className="max-w-xl text-base text-muted-foreground leading-[110%]">
             {t.welcome.ask}
             <br />
             {t.welcome.promise}

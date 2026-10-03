@@ -1,4 +1,5 @@
-import { BotIcon, SearchIcon, ShieldIcon } from "lucide-react"
+import { BarChart3Icon, BotIcon, SearchIcon, ShieldIcon } from "lucide-react"
+import { QuotaAlert } from "@/components/admin/quota-alert"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import {
@@ -17,6 +18,7 @@ import { getCurrentUser, USER_COLUMNS, type AppUser } from "@/lib/auth"
 import { getDictionary } from "@/lib/i18n/server"
 import { istDay, PLAN_STATUS, PLANS, planStatus } from "@/lib/plans"
 import { getSupabase } from "@/lib/supabase"
+import { quotaAlerts } from "@/lib/token-usage"
 import { usedCredits } from "@/lib/usage"
 
 // ISO timestamp -> yyyy-mm-dd in IST (for the date input).
@@ -57,6 +59,12 @@ export default async function AdminPage({
         title={t.admin.usersTitle}
       >
         <Button asChild variant="outline" className="h-10">
+          <Link href="/admin/usage">
+            <BarChart3Icon />
+            {t.usage.open}
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="h-10">
           <Link href="/admin/ai">
             <BotIcon />
             {t.common.aiSettings}
@@ -65,6 +73,7 @@ export default async function AdminPage({
         <CreateUserDialog />
       </PageHeader>
       <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
+        <QuotaAlert alerts={await quotaAlerts()} t={t} />
         <form
           className="flex gap-2 rounded-xl border bg-card p-2 shadow-sm"
           action="/admin"

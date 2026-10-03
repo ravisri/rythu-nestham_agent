@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import {
+  BarChart3Icon,
   BotIcon,
   CircleHelpIcon,
   DownloadIcon,
@@ -123,6 +124,12 @@ export function ProfileMenu({
                 <Link href="/admin/ai">
                   <BotIcon />
                   {t.common.aiSettings}
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className={ITEM}>
+                <Link href="/admin/usage">
+                  <BarChart3Icon />
+                  {t.usage.open}
                 </Link>
               </DropdownMenuItem>
             </>

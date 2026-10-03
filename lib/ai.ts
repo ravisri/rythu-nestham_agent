@@ -75,8 +75,15 @@ function languageModel(id: string, config: ProviderConfig) {
 export function modelIds(settings: AiSettings) {
   return {
     chat: settings.chatModel || process.env.CHAT_MODEL || DEFAULT_CHAT_MODEL,
+    guest:
+      settings.guestModel ||
+      process.env.GUEST_MODEL ||
+      settings.chatModel ||
+      process.env.CHAT_MODEL ||
+      DEFAULT_CHAT_MODEL,
     ocr: settings.ocrModel || process.env.OCR_MODEL || DEFAULT_CHAT_MODEL,
-    translate: process.env.TRANSLATE_MODEL || settings.ocrModel || DEFAULT_CHAT_MODEL,
+    translate:
+      process.env.TRANSLATE_MODEL || settings.ocrModel || DEFAULT_CHAT_MODEL,
     embedding: process.env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL,
   }
 }
@@ -84,6 +91,14 @@ export function modelIds(settings: AiSettings) {
 export async function chatModel() {
   const settings = await getAiSettings()
   return languageModel(modelIds(settings).chat, settings)
+}
+
+// Chat model for an audience: guests get the (free) guest model. The id is
+// returned too, for token tracking.
+export async function answerModel(guest: boolean) {
+  const settings = await getAiSettings()
+  const id = modelIds(settings)[guest ? "guest" : "chat"]
+  return { id, model: languageModel(id, settings) }
 }
 
 // OCR needs PDF input: google, anthropic and openai support it.

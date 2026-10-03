@@ -9,6 +9,10 @@ import { getSupabase } from "@/lib/supabase"
 export type AiSettings = {
   chatModel?: string
   ocrModel?: string
+  // Guests (not logged in) use this, ideally a free model; empty = chat model.
+  guestModel?: string
+  // Optional daily token budget for all guests together; empty = no limit.
+  guestDailyTokens?: number
   compatBaseUrl?: string
   apiKeys: Partial<Record<AiProvider, string>>
   // Saved keys that could not be decrypted (AI_SETTINGS_SECRET changed).
@@ -18,6 +22,8 @@ export type AiSettings = {
 export type AiSettingsRow = {
   chat_model: string | null
   ocr_model: string | null
+  guest_model?: string | null // migration 0007
+  guest_daily_tokens?: number | null
   compat_base_url: string | null
   api_keys: Partial<Record<AiProvider, string>> | null
 }
@@ -31,7 +37,7 @@ let cache: { at: number; value: Promise<AiSettings> } | undefined
 export async function readSettingsRow(): Promise<AiSettingsRow | null> {
   const { data, error } = await getSupabase()
     .from("ai_settings")
-    .select("chat_model, ocr_model, compat_base_url, api_keys")
+    .select("*") // "*": works before and after migration 0007
     .eq("id", 1)
     .maybeSingle()
   if (error) throw error
@@ -54,13 +60,18 @@ async function load(): Promise<AiSettings> {
     return {
       chatModel: row.chat_model ?? undefined,
       ocrModel: row.ocr_model ?? undefined,
+      guestModel: row.guest_model ?? undefined,
+      guestDailyTokens: row.guest_daily_tokens ?? undefined,
       compatBaseUrl: row.compat_base_url ?? undefined,
       apiKeys,
       unreadable,
     }
   } catch (error) {
     // Table not migrated yet / Supabase down: keep working on .env values.
-    console.error("AI settings unavailable, using env:", (error as Error).message)
+    console.error(
+      "AI settings unavailable, using env:",
+      (error as Error).message
+    )
     return EMPTY
   }
 }

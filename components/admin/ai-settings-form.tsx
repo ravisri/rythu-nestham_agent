@@ -60,7 +60,7 @@ function ModelPicker({
   description,
 }: {
   form: AiForm
-  role: "chat" | "ocr"
+  role: "chat" | "ocr" | "guest"
   title: string
   description: string
 }) {
@@ -254,12 +254,16 @@ function KeyRow({
 export function AiSettingsForm({
   chat,
   ocr,
+  guest,
+  guestDailyTokens,
   embedding,
   compatBaseUrl,
   keys,
 }: {
   chat: { provider: AiProvider; model: string }
   ocr: { provider: AiProvider; model: string }
+  guest: { provider: AiProvider; model: string }
+  guestDailyTokens: string
   embedding: string
   compatBaseUrl: string
   keys: Record<AiProvider, KeyStatus>
@@ -272,6 +276,9 @@ export function AiSettingsForm({
     chatModel: chat.model,
     ocrProvider: ocr.provider,
     ocrModel: ocr.model,
+    guestProvider: guest.provider,
+    guestModel: guest.model,
+    guestDailyTokens,
     compatBaseUrl,
     apiKeys: NO_KEYS,
     clearKeys: [],
@@ -301,6 +308,28 @@ export function AiSettingsForm({
         title={t.ai.ocrTitle}
         description={t.ai.ocrHint}
       />
+      <ModelPicker
+        form={form}
+        role="guest"
+        title={t.ai.guestTitle}
+        description={t.ai.guestHint}
+      />
+      <Card>
+        <CardHeader>
+          <CardTitle>{t.ai.guestBudgetTitle}</CardTitle>
+          <CardDescription>{t.ai.guestBudgetHint}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FormInput
+            control={form.control}
+            name="guestDailyTokens"
+            label={t.ai.guestBudgetLabel}
+            placeholder="500000"
+            inputMode="numeric"
+            autoComplete="off"
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

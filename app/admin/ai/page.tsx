@@ -1,4 +1,5 @@
 import { BotIcon } from "lucide-react"
+import { QuotaAlert } from "@/components/admin/quota-alert"
 import { redirect } from "next/navigation"
 import {
   AiSettingsForm,
@@ -16,6 +17,7 @@ import { getAiSettings, invalidateAiSettings } from "@/lib/ai-settings"
 import { getCurrentUser } from "@/lib/auth"
 import { getDictionary } from "@/lib/i18n/server"
 import { mask } from "@/lib/secrets"
+import { quotaAlerts } from "@/lib/token-usage"
 
 export default async function AiSettingsPage() {
   const me = await getCurrentUser()
@@ -50,9 +52,12 @@ export default async function AiSettingsPage() {
         title={t.admin.aiTitle}
       />
       <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
+        <QuotaAlert alerts={await quotaAlerts()} t={t} showLink={false} />
         <AiSettingsForm
           chat={splitModelId(ids.chat)}
           ocr={splitModelId(ids.ocr)}
+          guest={splitModelId(ids.guest)}
+          guestDailyTokens={settings.guestDailyTokens?.toString() ?? ""}
           embedding={ids.embedding}
           compatBaseUrl={
             settings.compatBaseUrl ?? process.env.COMPAT_BASE_URL ?? ""

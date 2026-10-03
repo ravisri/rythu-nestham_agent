@@ -36,14 +36,16 @@ export function InstallBanner() {
 
   return (
     <Card className="border-primary/30 py-3 shadow-sm">
-      <CardContent className="flex items-center gap-3 px-3">
+      <CardContent className="flex items-center gap-3 px-3 relative">
+        <div className="flex w-full items-center gap-1.5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
+        <div className="flex flex-1 items-center gap-2 justify-start">
         <img
           src="/icons/icon-192.png"
           alt=""
           className="size-12 shrink-0 rounded-xl shadow-sm"
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 items-start text-left">
           <p className="leading-tight font-semibold">{t.pwa.title}</p>
           <p className="mt-0.5 text-sm text-muted-foreground">
             {isIOS ? (
@@ -56,13 +58,14 @@ export function InstallBanner() {
             )}
           </p>
         </div>
+        </div>
         {canInstall && (
           <Button className="h-10 shrink-0 rounded-full px-4" onClick={install}>
             <DownloadIcon />
             {t.pwa.install}
           </Button>
         )}
-        <Button
+         <Button
           variant="ghost"
           size="icon"
           className="size-9 shrink-0 rounded-full"
@@ -71,6 +74,8 @@ export function InstallBanner() {
         >
           <XIcon />
         </Button>
+        </div>
+       
       </CardContent>
     </Card>
   )
