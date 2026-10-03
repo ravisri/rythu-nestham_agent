@@ -129,7 +129,7 @@ export function ProfileMenu({
               <DropdownMenuItem asChild className={ITEM}>
                 <Link href="/admin/usage">
                   <BarChart3Icon />
-                  {t.usage.open}
+                  {t.usage?.open}
                 </Link>
               </DropdownMenuItem>
             </>
