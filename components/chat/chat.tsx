@@ -66,6 +66,7 @@ import {
   wasAskedToday,
 } from "@/lib/chat-history"
 import { compressImage } from "@/lib/image"
+import { splitSuggestions } from "@/lib/suggestions"
 import { GUEST, MESSAGES, type Usage } from "@/lib/plans"
 import { useTeluguLexicon } from "@/hooks/use-telugu-lexicon"
 import {
@@ -76,6 +77,7 @@ import {
 import { GuestSignupCard } from "./guest-signup-card"
 import { ListeningCard } from "./listening-card"
 import { Actions, Sources } from "./message-extras"
+import { NextQuestions } from "./next-questions"
 import { Welcome } from "./welcome"
 
 const transport = new DefaultChatTransport({
@@ -494,7 +496,12 @@ function ChatInner({
             </ConversationEmptyState>
           ) : (
             messages.map((message, index) => {
-              const text = textOf(message)
+              // Assistant replies may end with AI "next question" suggestions.
+              const { answer: text, suggestions } =
+                message.role === "assistant"
+                  ? splitSuggestions(textOf(message))
+                  : { answer: textOf(message), suggestions: [] }
+              const isLatest = index === messages.length - 1
               const images = message.parts.flatMap((p) =>
                 p.type === "file" && p.mediaType.startsWith("image/") ? [p] : []
               )
@@ -550,6 +557,12 @@ function ChatInner({
                       onSpeak={() => speak(message.id, text)}
                       onStop={stopSpeech}
                     />
+                    {isLatest && !busy && !guestOut && (
+                      <NextQuestions
+                        questions={suggestions}
+                        onPick={(q) => void send(q)}
+                      />
+                    )}
                   </div>
                 </div>
               )

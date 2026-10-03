@@ -19,15 +19,24 @@ import {
   renewSession,
   type AppUser,
 } from "@/lib/auth"
-import { chargeGuest, guestLeft, refundGuest } from "@/lib/guest"
+import {
+  addGuestSuggestion,
+  chargeGuest,
+  guestLeft,
+  guestSuggestionsLeft,
+  refundGuest,
+} from "@/lib/guest"
 import { creditCost, MESSAGES, planStatus } from "@/lib/plans"
 import {
+  addUserSuggestion,
   chargeCredits,
   chargePhoto,
   recordUsage,
   refundPhoto,
   usageSummary,
+  userSuggestionsLeft,
 } from "@/lib/usage"
+import { NEXT_MARKER, stripSuggestions } from "@/lib/suggestions"
 import { BANNED_PROMPT_LIST } from "@/lib/banned-pesticides"
 import { cropFromText, toCrop } from "@/lib/crops"
 import { searchKnowledge } from "@/lib/rag"
@@ -70,7 +79,16 @@ const ANSWER_RULES = `3. Answer from the reference / search text only. Prefer lo
 type Results = Awaited<ReturnType<typeof searchKnowledge>>["results"]
 
 // Reference goes last so the fixed prompt prefix stays cacheable.
-function systemPrompt(results: Results, canSearch: boolean): string {
+// Added only while the user has suggestions left today (lib/plans.ts limits).
+const SUGGEST_RULE = `After a real answer (not a fixed reply above), add ONE last line exactly:
+${NEXT_MARKER} <question 1> || <question 2>
+Two short Telugu follow-up questions (max 12 words each) this farmer may ask next about the same crop/problem, answerable from ANGRAU/ICAR guides.`
+
+function systemPrompt(
+  results: Results,
+  canSearch: boolean,
+  suggest: boolean
+): string {
   const reference = results.length
     ? results
         .map(
@@ -84,6 +102,7 @@ function systemPrompt(results: Results, canSearch: boolean): string {
     canSearch ? SEARCH_RULE : REFERENCE_RULE,
     ANSWER_RULES,
     `Reference:\n${reference}`,
+    ...(suggest ? [SUGGEST_RULE] : []),
   ].join("\n")
 }
 
@@ -112,9 +131,17 @@ function prune(messages: UIMessage[]): UIMessage[] {
   const last = window.length - 1
 
   return window
-    .map((m, i) =>
-      i === last ? m : { ...m, parts: m.parts.filter((p) => p.type === "text") }
-    )
+    .map((m, i) => ({
+      ...m,
+      parts: (i === last
+        ? m.parts
+        : m.parts.filter((p) => p.type === "text")
+      ).map((p) =>
+        p.type === "text" && m.role === "assistant"
+          ? { ...p, text: stripSuggestions(p.text) }
+          : p
+      ),
+    }))
     .filter((m) => m.parts.length > 0)
 }
 
@@ -201,6 +228,9 @@ type Meter = {
   ) => Promise<void>
   // The model failed: give everything back.
   refund: () => Promise<void>
+  // "Next question" suggestions left today / count one that was shown.
+  suggestionsLeft: () => Promise<number>
+  addSuggestion: () => Promise<void>
 }
 
 function userMeter(user: AppUser): Meter {
@@ -229,6 +259,8 @@ function userMeter(user: AppUser): Meter {
       if (photo) await refundPhoto(user.id)
       await recordUsage(user.id, -cost)
     },
+    suggestionsLeft: () => userSuggestionsLeft(user),
+    addSuggestion: () => addUserSuggestion(user.id),
   }
 }
 
@@ -252,6 +284,8 @@ function guestMeter(guestId: string, ip: string): Meter {
       if (noAnswer) await refundGuest(guestId, ip, photo)
     },
     refund: () => refundGuest(guestId, ip, photo),
+    suggestionsLeft: () => guestSuggestionsLeft(guestId),
+    addSuggestion: () => addGuestSuggestion(guestId),
   }
 }
 
@@ -314,13 +348,16 @@ export async function POST(req: Request) {
 
   const limited = await meter.charge(hasImage)
   if (limited) return limited
-  const left = await meter.left()
+  const [left, suggestionsLeft] = await Promise.all([
+    meter.left(),
+    meter.suggestionsLeft(),
+  ])
 
   // Guests use the admin's (free) guest model; users the chat model.
   const { id: modelId, model } = await answerModel(!user)
   const result = streamText({
     model,
-    system: systemPrompt(results, hasImage),
+    system: systemPrompt(results, hasImage, suggestionsLeft > 0),
     messages: await convertToModelMessages(window, { tools }),
     tools: hasImage ? tools : undefined,
     stopWhen: stepCountIs(3),
@@ -342,6 +379,8 @@ export async function POST(req: Request) {
           tokensOut
         ),
         recordModelUsage({ model: modelId, audience, tokensIn, tokensOut }),
+        // Count suggestions only when the model actually gave them.
+        text.includes(NEXT_MARKER) ? meter.addSuggestion() : undefined,
       ])
     },
     // The farmer got no answer: give the credits (and photo) back. Quota

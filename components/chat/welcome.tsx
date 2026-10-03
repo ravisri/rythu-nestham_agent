@@ -85,7 +85,8 @@ export function Welcome({
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <GiftIcon className="size-5" />
           </span>
-          <div className="min-w-0 flex-1">
+          <div className="flex flex-1 justify-between max-sm:flex-col gap-2">
+          <div className="min-w-0 flex-1 text-left gap-1.5">
             <p className="flex items-start font-semibold">
               {t.guest.banner(GUEST.daily)}
             </p>
@@ -104,6 +105,7 @@ export function Welcome({
               </span>
             </div>
           </div>
+          <div className="max-sm:text-left">
           <Button
             asChild
             size="sm"
@@ -112,6 +114,8 @@ export function Welcome({
           >
             <Link href="/login?tab=signup">{t.guest.signup}</Link>
           </Button>
+          </div>
+          </div>
         </div>
       )}
 

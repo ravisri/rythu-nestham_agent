@@ -1,19 +1,43 @@
 // Plans and credit rules. Client-safe (no server imports).
 // 1 text question = 1 credit (~3k tokens), 1 photo question = 2 credits.
 // photosDaily: photo questions per IST day (photos cost the most tokens).
+// suggestionsDaily: times per day the AI adds 2 "next question" suggestions.
 
 export const PLANS = {
   // Labels: lib/i18n/dictionaries.ts (plans.*)
-  trial: { daily: 5, period: 50, perMonth: false, photosDaily: 2 },
-  pro: { daily: 20, period: 400, perMonth: true, photosDaily: 10 },
-  pro_plus: { daily: 80, period: 1500, perMonth: true, photosDaily: 30 },
+  trial: {
+    daily: 5,
+    period: 50,
+    perMonth: false,
+    photosDaily: 2,
+    suggestionsDaily: 5,
+  },
+  pro: {
+    daily: 20,
+    period: 400,
+    perMonth: true,
+    photosDaily: 10,
+    suggestionsDaily: 20,
+  },
+  pro_plus: {
+    daily: 80,
+    period: 1500,
+    perMonth: true,
+    photosDaily: 30,
+    suggestionsDaily: 40,
+  },
 } as const
 
 export type Plan = keyof typeof PLANS
 
 // Not logged in: questions per IST day (photos count as questions), plus a
 // per-IP cap so clearing cookies doesn't give unlimited questions.
-export const GUEST = { daily: 5, photos: 1, ipDaily: 15 } as const
+export const GUEST = {
+  daily: 5,
+  photos: 1,
+  ipDaily: 15,
+  suggestions: 1,
+} as const
 
 export type PlanUser = {
   plan: Plan

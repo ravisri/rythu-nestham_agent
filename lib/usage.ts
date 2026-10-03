@@ -46,6 +46,27 @@ export async function refundPhoto(userId: string) {
   if (error) console.error("refundPhoto failed:", error)
 }
 
+// "Next question" suggestions left today (0 if migration 0008 isn't run).
+export async function userSuggestionsLeft(user: AppUser): Promise<number> {
+  const { data, error } = await getSupabase()
+    .from("usage_daily")
+    .select("suggestions")
+    .eq("user_id", user.id)
+    .eq("day", istDay())
+    .maybeSingle()
+  if (error) return 0
+  const used = (data?.suggestions as number | undefined) ?? 0
+  return Math.max(0, PLANS[user.plan].suggestionsDaily - used)
+}
+
+export async function addUserSuggestion(userId: string) {
+  const { error } = await getSupabase().rpc("add_user_suggestion", {
+    p_user: userId,
+    p_day: istDay(),
+  })
+  if (error) console.error("addUserSuggestion failed:", error)
+}
+
 // Tokens after a reply; negative credits = refund after an error.
 export async function recordUsage(
   userId: string,
@@ -74,12 +95,19 @@ export async function usedCredits(
   const { data, error } = await getSupabase()
     .from("usage_daily")
     .select("user_id, day, credits")
-    .in("user_id", users.map((u) => u.id))
+    .in(
+      "user_id",
+      users.map((u) => u.id)
+    )
     .gte("day", periodStart("trial")) // all rows; filtered per plan below
   if (error) throw error
 
   const plans = new Map(users.map((u) => [u.id, u.plan]))
-  for (const row of data as { user_id: string; day: string; credits: number }[]) {
+  for (const row of data as {
+    user_id: string
+    day: string
+    credits: number
+  }[]) {
     const entry = result.get(row.user_id)!
     if (row.day === day) entry.today += row.credits
     if (row.day >= periodStart(plans.get(row.user_id)!, day))
@@ -94,7 +122,10 @@ export async function usageSummary(user: AppUser): Promise<Usage> {
   const used = (await usedCredits([user])).get(user.id)!
   const left =
     status === "active"
-      ? Math.max(0, Math.min(plan.daily - used.today, plan.period - used.period))
+      ? Math.max(
+          0,
+          Math.min(plan.daily - used.today, plan.period - used.period)
+        )
       : 0
   return { plan: user.plan, left, status }
 }
