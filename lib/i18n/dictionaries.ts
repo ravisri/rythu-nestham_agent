@@ -57,6 +57,8 @@ export const te = {
     micDenied: "మైక్రోఫోన్ అనుమతి ఇవ్వండి.",
     micNoSpeech:
       "మీ మాట సరిగ్గా అర్థం కాలేదు. దయచేసి నెమ్మదిగా, స్పష్టంగా మళ్లీ చెప్పండి. అప్పుడు సరైన సమాచారం ఇస్తాను.",
+    micReview:
+      "మీ మాటలు బాక్స్‌లో ఉన్నాయి. సరిచూసి పంపండి ➤ నొక్కండి. మార్చాలంటే మళ్లీ మాట్లాడండి.",
     micBroken: "మైక్ పనిచేయడం లేదు. టైప్ చేయండి.",
     clearChat: "చాట్ తొలగించు",
     clearTitle: "చాట్ మొత్తం తొలగించాలా?",
@@ -368,6 +370,8 @@ export const en: Dictionary = {
     micDenied: "Please allow microphone access.",
     micNoSpeech:
       "I couldn't understand your voice clearly. Please speak slowly and clearly again, so I can give you the right information.",
+    micReview:
+      "Your words are in the box. Check them and press send ➤. To change them, speak again.",
     micBroken: "Microphone isn't working. Please type instead.",
     clearChat: "Clear chat",
     clearTitle: "Clear the whole chat?",

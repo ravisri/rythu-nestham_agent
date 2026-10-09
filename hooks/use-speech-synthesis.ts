@@ -1,9 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { toSpeechText } from "@/lib/speech-text"
 
+// Units as words first, so "మి.లీ." dots don't split sentences either.
 function toSpeakable(text: string): string[] {
-  return text
+  return toSpeechText(text)
     .replace(/[*_#`>]/g, "")
     .replace(/^\s*[-•]\s+/gm, "")
     .split(/(?<=[.!?।])\s+|\n+/)

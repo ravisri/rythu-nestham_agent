@@ -377,17 +377,17 @@ function ChatInner({
 
   const mic = useSpeechRecognition({
     onInterim: (text) => controller.textInput.setInput(text),
+    // Never sends by itself: the words stay in the box to check, edit or say
+    // again; the farmer presses send (➤). A chosen photo stays attached.
     onFinal: (text) => {
-      controller.textInput.clear()
-      const files = [...attachments.files]
-      const unclear = unclearSpeech(text)
-      // Unclear voice: ask again instead of spending a credit (a photo still goes).
-      if (unclear && files.length === 0) {
+      if (unclearSpeech(text)) {
+        controller.textInput.clear()
         setInfo(t.chat.micNoSpeech)
         if (canSpeak) speak("mic-unclear", teluguText.chat.micNoSpeech)
         return
       }
-      void send(unclear ? "" : text, files).then(() => attachments.clear())
+      controller.textInput.setInput(text.trim())
+      setInfo(t.chat.micReview)
     },
   })
 
