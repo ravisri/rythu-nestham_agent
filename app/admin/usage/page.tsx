@@ -19,6 +19,11 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import {
+  cleanupGuestUsage,
+  getActivity,
+  type ActivityDay,
+} from "@/lib/activity"
 import { getAiSettings } from "@/lib/ai-settings"
 import { getCurrentUser } from "@/lib/auth"
 import { getDictionary } from "@/lib/i18n/server"
@@ -104,12 +109,19 @@ export default async function UsagePage() {
   const { t } = await getDictionary()
   const u = t.usage
 
-  const [rows, users, guests, settings] = await Promise.all([
+  cleanupGuestUsage()
+  const [rows, users, guests, settings, activity] = await Promise.all([
     modelUsage(14),
     topUsers(30),
     guestsToday(),
     getAiSettings(),
+    getActivity(),
   ])
+  const peak = activity.reduce<ActivityDay | undefined>(
+    (best, d) =>
+      !best || d.guests + d.users > best.guests + best.users ? d : best,
+    undefined
+  )
 
   const today = istDay()
   const todayRows = rows.filter((r) => r.day === today)
@@ -281,6 +293,41 @@ export default async function UsagePage() {
               />
             </CardContent>
           )}
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ActivityIcon className="size-4 text-primary" />
+              {u.activityTitle}
+            </CardTitle>
+            <CardDescription>{u.activityNote}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {activity.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{u.activityEmpty}</p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {u.activityTotals(
+                    activity.reduce((s, d) => s + d.guest_requests, 0),
+                    activity.reduce((s, d) => s + d.user_requests, 0),
+                    peak
+                      ? `${peak.day} (${peak.guests + peak.users})`
+                      : "-"
+                  )}
+                </p>
+                <Table
+                  head={[u.day, u.activityGuests, u.activityUsers]}
+                  rows={activity.map((d) => [
+                    d.day,
+                    `${fmt(d.guests)} (${fmt(d.guest_requests)})`,
+                    `${fmt(d.users)} (${fmt(d.user_requests)})`,
+                  ])}
+                />
+              </>
+            )}
+          </CardContent>
         </Card>
       </main>
     </PageShell>

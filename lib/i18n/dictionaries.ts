@@ -115,6 +115,15 @@ export const te = {
     credits: "క్రెడిట్లు",
     guestsTitle: "ఈరోజు అతిథులు",
     guestsSummary: (n: number, q: number) => `${n} మంది అతిథులు · ${q} ప్రశ్నలు`,
+    activityTitle: "రోజువారీ యాక్టివ్ యూజర్లు",
+    activityNote:
+      "ఈ నెల + గత నెల మాత్రమే (పాత అతిథి డేటా ప్రతి నెల ఆటోమేటిక్‌గా తొలగిపోతుంది). ప్రశ్నలు, ఫోటోలు సేవ్ చేయబడవు — సంఖ్యలు మాత్రమే.",
+    activityGuests: "అతిథులు (ప్రశ్నలు)",
+    activityUsers: "యూజర్లు (ప్రశ్నలు)",
+    activityTotals: (guests: number, users: number, peak: string) =>
+      `మొత్తం ప్రశ్నలు: అతిథులు ${guests} · యూజర్లు ${users} · ఎక్కువ రద్దీ: ${peak}`,
+    activityEmpty:
+      "ఇంకా డేటా లేదు (లేదా supabase/migrations/0010_activity.sql రన్ చేయలేదు).",
     guest: "అతిథి",
     questions: "ప్రశ్నలు",
     tokens: "టోకెన్లు",
@@ -428,6 +437,15 @@ export const en: Dictionary = {
     credits: "Credits",
     guestsTitle: "Guests today",
     guestsSummary: (n: number, q: number) => `${n} guests · ${q} questions`,
+    activityTitle: "Daily active users",
+    activityNote:
+      "This month + last month only (older guest data is deleted automatically every month). No questions or photos are stored — counts only.",
+    activityGuests: "Guests (questions)",
+    activityUsers: "Users (questions)",
+    activityTotals: (guests: number, users: number, peak: string) =>
+      `Total questions: guests ${guests} · users ${users} · busiest day: ${peak}`,
+    activityEmpty:
+      "No data yet (or supabase/migrations/0010_activity.sql has not been run).",
     guest: "Guest",
     questions: "Questions",
     tokens: "Tokens",

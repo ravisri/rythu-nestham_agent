@@ -1,4 +1,5 @@
 // Server-only metering for guests (no login): GUEST limits per IST day.
+import { cleanupGuestUsage } from "@/lib/activity"
 import { GUEST, istDay } from "@/lib/plans"
 import { getSupabase } from "@/lib/supabase"
 
@@ -15,6 +16,7 @@ export async function chargeGuest(
   ip: string,
   photo: boolean
 ): Promise<GuestCharge> {
+  cleanupGuestUsage() // monthly purge of old guest rows (once a day, background)
   const { data, error } = await getSupabase().rpc("use_guest", {
     ...keys(guestId, ip),
     p_day: istDay(),
