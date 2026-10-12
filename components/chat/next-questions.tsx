@@ -1,26 +1,35 @@
 "use client"
 
-import { CornerDownRightIcon, SparklesIcon } from "lucide-react"
+import {
+  CornerDownRightIcon,
+  SparklesIcon,
+  type LucideIcon,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/lib/i18n/client"
 
-// AI-suggested follow-up questions under the latest answer; a tap asks it.
+// Follow-up questions under the latest answer (AI suggestions, or "how to make"
+// organic preparations); a tap asks it.
 export function NextQuestions({
   questions,
   disabled,
   onPick,
+  title,
+  icon: Icon = SparklesIcon,
 }: {
   questions: string[]
   disabled?: boolean
   onPick: (question: string) => void
+  title?: string
+  icon?: LucideIcon
 }) {
   const { t } = useI18n()
   if (questions.length === 0) return null
   return (
     <section className="space-y-2 pt-1">
       <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-        <SparklesIcon className="size-4 text-primary" />
-        {t.chat.nextTitle}
+        <Icon className="size-4 text-primary" />
+        {title ?? t.chat.nextTitle}
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
         {questions.map((q) => (

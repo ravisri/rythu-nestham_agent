@@ -7,6 +7,7 @@ import { DefaultChatTransport, type UIMessage } from "ai"
 import {
   CameraIcon,
   CoinsIcon,
+  LeafIcon,
   MicIcon,
   ShieldCheckIcon,
   SproutIcon,
@@ -67,6 +68,7 @@ import {
 } from "@/lib/chat-history"
 import { checkText, GUARD_MESSAGES } from "@/lib/guardrails"
 import { compressImage } from "@/lib/image"
+import { howToQuestions } from "@/lib/organic-preps"
 import { splitSuggestions } from "@/lib/suggestions"
 import { GUEST, MESSAGES, type Usage } from "@/lib/plans"
 import { useTeluguLexicon } from "@/hooks/use-telugu-lexicon"
@@ -628,10 +630,23 @@ function ChatInner({
                       onStop={stopSpeech}
                     />
                     {isLatest && !busy && !guestOut && (
-                      <NextQuestions
-                        questions={suggestions}
-                        onPick={(q) => void send(q)}
-                      />
+                      <>
+                        {/* Organic preparations named in the answer -> recipe question. */}
+                        <NextQuestions
+                          title={t.chat.howToTitle}
+                          icon={LeafIcon}
+                          questions={howToQuestions(
+                            text,
+                            textOf(messages[index - 1] ?? message),
+                            suggestions
+                          )}
+                          onPick={(q) => void send(q)}
+                        />
+                        <NextQuestions
+                          questions={suggestions}
+                          onPick={(q) => void send(q)}
+                        />
+                      </>
                     )}
                   </div>
                 </div>

@@ -68,6 +68,7 @@ export const te = {
     cropPhoto: "పంట ఫోటో",
     photoLimit: "ఒక ఫోటో మాత్రమే (10MB లోపు) పంపండి.",
     nextTitle: "తదుపరి శాస్త్రీయ విశ్లేషణ కొరకు ఎంచుకోండి:",
+    howToTitle: "తయారీ విధానం తెలుసుకోండి:",
     askedToday:
       "ఈ ప్రశ్న ఈ రోజు ఇప్పటికే అడిగారు. వేరే వ్యవసాయ సమస్య ఉంటే అడగండి.",
     selectedPhoto: "ఎంచుకున్న ఫోటో",
@@ -390,6 +391,7 @@ export const en: Dictionary = {
     cropPhoto: "Crop photo",
     photoLimit: "Send only one photo (under 10MB).",
     nextTitle: "Pick a next question for deeper analysis:",
+    howToTitle: "Learn how to make it:",
     askedToday:
       "You already asked this question today. Ask me about any other farming problem.",
     selectedPhoto: "Selected photo",
