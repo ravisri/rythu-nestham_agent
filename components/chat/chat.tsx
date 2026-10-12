@@ -131,7 +131,8 @@ const ANSWER_STYLES = [
   "[&_ul]:my-2 [&_ul]:list-outside [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-6",
   "[&_ol]:my-2 [&_ol]:list-outside [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-6",
   "[&_li]:pl-1 [&_li]:marker:text-primary [&_li>p]:my-0",
-  "[&_strong]:font-semibold [&_strong]:text-primary",
+  // Streamdown renders **bold** as <span data-streamdown="strong">.
+  "[&_strong]:font-semibold [&_strong]:text-primary [&_[data-streamdown=strong]]:text-primary",
 ].join(" ")
 
 const toolPart = (message: UIMessage) =>

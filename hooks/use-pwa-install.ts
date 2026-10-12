@@ -34,7 +34,9 @@ export function startPwa() {
 
   // Production only: in dev a service worker would cache hot-reload files.
   if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
-    navigator.serviceWorker.register("/sw.js").catch(() => {})
+    // New build id per deploy -> new worker -> old build's cached files deleted.
+    const version = process.env.NEXT_PUBLIC_BUILD_ID ?? "v1"
+    navigator.serviceWorker.register(`/sw.js?v=${version}`).catch(() => {})
   }
 }
 

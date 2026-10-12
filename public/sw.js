@@ -1,8 +1,11 @@
 // Rythu Nestham service worker: installable app + offline page.
 // Chat (/api), Server Actions (POST), admin and other origins always go to the
-// network and are never cached. Bump VERSION to drop old caches.
-const VERSION = "v1"
+// network and are never cached. The app registers /sw.js?v=<build id>, so every
+// deploy gets a new cache and "activate" deletes the previous build's files.
+const VERSION = new URL(self.location.href).searchParams.get("v") || "v1"
 const CACHE = `rn-${VERSION}`
+// Safety cap on cached static files (one build needs far fewer).
+const MAX_STATIC = 60
 const OFFLINE = "/offline.html"
 const PRECACHE = [
   OFFLINE,
@@ -64,7 +67,16 @@ self.addEventListener("fetch", (event) => {
           fetch(request).then((response) => {
             if (response.ok) {
               const copy = response.clone()
-              caches.open(CACHE).then((cache) => cache.put(request, copy))
+              caches.open(CACHE).then(async (cache) => {
+                await cache.put(request, copy)
+                // Oldest build files first beyond the cap (icons/offline page stay).
+                const keys = (await cache.keys()).filter((k) =>
+                  new URL(k.url).pathname.startsWith("/_next/static/")
+                )
+                for (const old of keys.slice(0, Math.max(0, keys.length - MAX_STATIC))) {
+                  await cache.delete(old)
+                }
+              })
             }
             return response
           })

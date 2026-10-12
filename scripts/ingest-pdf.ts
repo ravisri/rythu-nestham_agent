@@ -8,6 +8,9 @@
 //        npm run ingest:file chilli_file.docx   (only that file; add --force to re-embed it)
 // Never duplicates: a file replaces its own rows; the same file under another name and
 // chunks already stored from another file are skipped.
+// Edited a file? Re-run it (`--file <name>`): only changed chunks are embedded and
+// inserted, removed ones deleted, unchanged ones kept. --force is needed only once
+// for rows stored before change tracking (metadata.file_hash) existed.
 //        npm run ingest:ocr              (only fill the OCR cache, no embedding / DB writes)
 // Re-running continues where it stopped: stored sections are skipped, OCR pages come from data/ocr/.
 // Needs in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and the API key
@@ -35,6 +38,7 @@ import {
 } from "@/lib/ocr"
 import { embedDocuments } from "@/lib/rag"
 import { getSupabase } from "@/lib/supabase"
+import { junkReason } from "@/lib/text-quality"
 
 const ROOT = path.join(process.cwd(), "data", "pdfs")
 const OCR_CACHE = path.join(process.cwd(), "data", "ocr")
@@ -414,43 +418,71 @@ async function storedElsewhere(
   return found
 }
 
-// Returns how many chunks were stored (0 = nothing new).
+type StoredRow = { id: string; metadata: Record<string, string | undefined> }
+
+// This file's (or manifest section's) rows already in crop_knowledge.
+async function storedRows(job: Job, source: string): Promise<StoredRow[]> {
+  const query = getSupabase()
+    .from("crop_knowledge")
+    .select("id, metadata")
+    .eq("metadata->>source", source)
+  const { data, error } = job.section
+    ? await query.eq("metadata->>section", job.section)
+    : await query
+  if (error) throw error
+  return data as StoredRow[]
+}
+
+// Has the file changed since its rows were stored? (metadata.file_hash)
+function jobState(rows: StoredRow[], fileHash: string) {
+  if (rows.length === 0) return "new"
+  if (rows.every((r) => r.metadata.file_hash === fileHash)) return "unchanged"
+  if (rows.every((r) => !r.metadata.file_hash)) return "untracked" // stored before file_hash existed
+  return "changed"
+}
+
+type StoreResult = { added: number; removed: number; kept: number }
+
+// Incremental update: chunks whose text is unchanged are kept (no re-embedding),
+// only new chunks are embedded and inserted, chunks no longer in the file are
+// deleted. Never duplicates: one row per chunk text per file, and text already
+// stored by another file is skipped.
 async function store(
   all: Piece[],
   job: Job,
   source: string,
   fileHash: string,
   state?: string
-): Promise<number> {
+): Promise<StoreResult> {
   const supabase = getSupabase()
-  const elsewhere = await storedElsewhere(
-    all.map((p) => hashOf(p.content)),
-    source
-  )
-  const pieces = all.filter((p) => !elsewhere.has(hashOf(p.content)))
+  // Same text twice in one file -> stored once.
+  const unique = new Map<string, Piece>()
+  for (const piece of all) unique.set(hashOf(piece.content), unique.get(hashOf(piece.content)) ?? piece)
+
+  const elsewhere = await storedElsewhere([...unique.keys()], source)
   if (elsewhere.size > 0) {
     const from = [...new Set(elsewhere.values())].join(", ")
-    console.log(
-      `    skipped ${all.length - pieces.length} chunk(s) already stored from ${from}`
-    )
+    console.log(`    skipped ${elsewhere.size} chunk(s) already stored from ${from}`)
+    for (const hash of elsewhere.keys()) unique.delete(hash)
   }
-  if (pieces.length === 0) return 0
 
+  // Keep one existing row per chunk that is still in the file; drop the rest.
+  const keep: StoredRow[] = []
+  const remove: string[] = []
+  const kept = new Set<string>()
+  for (const row of await storedRows(job, source)) {
+    const hash = row.metadata.hash
+    if (hash && unique.has(hash) && !kept.has(hash)) {
+      kept.add(hash)
+      keep.push(row)
+    } else {
+      remove.push(row.id)
+    }
+  }
+  const pieces = [...unique.values()].filter((p) => !kept.has(hashOf(p.content)))
   const hashes = pieces.map((p) => hashOf(p.content))
-  if (await isUnchanged(job, source, hashes)) {
-    await addFileHash(job, source, fileHash)
-    console.log("    text unchanged, embedding skipped")
-    return 0
-  }
-  const del = supabase
-    .from("crop_knowledge")
-    .delete()
-    .eq("metadata->>source", source)
-  const { error: delError } = job.section
-    ? await del.eq("metadata->>section", job.section)
-    : await del
-  if (delError) throw delError
 
+  // Insert new chunks first, then delete old ones: search never sees a gap.
   for (let i = 0; i < pieces.length; i += BATCH) {
     const batch = pieces.slice(i, i + BATCH)
     const embeddings = await withRetry("embed", () =>
@@ -475,27 +507,35 @@ async function store(
     if (error) throw error
     if (i + BATCH < pieces.length) await sleep(EMBED_PAUSE_MS)
   }
-  return pieces.length
-}
 
-// Rows stored before file_hash existed: add it (no re-embedding needed).
-async function addFileHash(job: Job, source: string, fileHash: string) {
-  const query = getSupabase()
-    .from("crop_knowledge")
-    .select("id, metadata")
-    .eq("metadata->>source", source)
-    .is("metadata->>file_hash", null)
-  const { data, error } = job.section
-    ? await query.eq("metadata->>section", job.section)
-    : await query
-  if (error) throw error
-  for (const row of data as { id: string; metadata: Record<string, unknown> }[]) {
-    const { error: updateError } = await getSupabase()
+  for (let i = 0; i < remove.length; i += 100) {
+    const { error } = await supabase
       .from("crop_knowledge")
-      .update({ metadata: { ...row.metadata, file_hash: fileHash } })
-      .eq("id", row.id)
-    if (updateError) throw updateError
+      .delete()
+      .in("id", remove.slice(i, i + 100))
+    if (error) throw error
   }
+
+  // Kept rows: record the new file version (and page numbers, which can shift).
+  const stale = keep.filter((row) => {
+    const piece = unique.get(row.metadata.hash!)!
+    return row.metadata.file_hash !== fileHash || row.metadata.pages !== piece.pages
+  })
+  for (let i = 0; i < stale.length; i += 20) {
+    await Promise.all(
+      stale.slice(i, i + 20).map(async (row) => {
+        const { pages } = unique.get(row.metadata.hash!)!
+        const metadata = { ...row.metadata, file_hash: fileHash, pages }
+        if (!pages) delete metadata.pages
+        const { error } = await supabase
+          .from("crop_knowledge")
+          .update({ metadata })
+          .eq("id", row.id)
+        if (error) throw error
+      })
+    )
+  }
+  return { added: pieces.length, removed: remove.length, kept: keep.length }
 }
 
 // The same file under another name / folder is never embedded twice.
@@ -512,35 +552,6 @@ async function storedAs(fileHash: string, source: string) {
 
 const hashOf = (text: string) =>
   createHash("sha1").update(text).digest("hex").slice(0, 16)
-
-// With --force, re-embedding identical text only wastes embed quota.
-async function isUnchanged(job: Job, source: string, hashes: string[]) {
-  const query = getSupabase()
-    .from("crop_knowledge")
-    .select("hash:metadata->>hash")
-    .eq("metadata->>source", source)
-  const { data, error } = job.section
-    ? await query.eq("metadata->>section", job.section)
-    : await query
-  if (error) throw error
-  const stored = (data as { hash: string | null }[]).map((r) => r.hash).sort()
-  const fresh = [...hashes].sort()
-  return (
-    stored.length === fresh.length && stored.every((h, i) => h === fresh[i])
-  )
-}
-
-async function isStored(job: Job, source: string): Promise<boolean> {
-  const query = getSupabase()
-    .from("crop_knowledge")
-    .select("id", { count: "exact", head: true })
-    .eq("metadata->>source", source)
-  const { count, error } = job.section
-    ? await query.eq("metadata->>section", job.section)
-    : await query
-  if (error) throw error
-  return (count ?? 0) > 0
-}
 
 async function ingest(file: string, folderCrop: string) {
   const manifest = await readManifest(file)
@@ -570,10 +581,18 @@ async function ingest(file: string, folderCrop: string) {
   for (const job of jobs) {
     const label = `${job.crop}${job.topic ? `/${job.topic}` : ""}`
     console.log(`  ${label}${job.section ? ` — ${job.section}` : ""}`)
-    if (!FORCE && (await isStored(job, source))) {
-      console.log("    already stored, skipped (use --force to redo)")
+    const state = jobState(await storedRows(job, source), fileHash)
+    if (!FORCE && state === "unchanged") {
+      console.log("    unchanged since last ingest, skipped")
       continue
     }
+    if (!FORCE && state === "untracked") {
+      console.log(
+        "    already stored, skipped (run once with --force to track future changes)"
+      )
+      continue
+    }
+    if (state === "changed") console.log("    file changed: updating only what changed")
     if (isPdf) reader ??= await PdfReader.open(file)
     // Short header on every piece: better retrieval for ~10 tokens.
     const header = `${CROPS[job.crop as keyof typeof CROPS] ?? job.crop} (${label}): `
@@ -606,8 +625,9 @@ async function ingest(file: string, folderCrop: string) {
     for (const part of parts) {
       const telugu = await toTelugu(part.text)
       for (const c of chunk(telugu)) {
-        // Unreadable legacy-font junk would only pollute search results.
-        if (garbledShare(c) > GARBLED) {
+        // Unreadable junk (legacy-font, Telugu gibberish, OCR word loops)
+        // would only pollute search results.
+        if (garbledShare(c) > GARBLED || junkReason(c)) {
           dropped++
           continue
         }
@@ -625,8 +645,18 @@ async function ingest(file: string, folderCrop: string) {
       console.log("    no text found, skipped")
       continue
     }
-    const stored = await store(pieces, job, source, fileHash, manifest.state)
-    if (stored > 0) console.log(`    stored ${stored} chunks (${label})`)
+    const { added, removed, kept } = await store(
+      pieces,
+      job,
+      source,
+      fileHash,
+      manifest.state
+    )
+    console.log(
+      added || removed
+        ? `    added ${added}, removed ${removed}, kept ${kept} chunk(s) (${label})`
+        : `    text unchanged, embedding skipped (${kept} chunk(s))`
+    )
   }
 }
 
