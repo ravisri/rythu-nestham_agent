@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from "next"
 import { Geist_Mono, Noto_Sans_Telugu, Geist } from "next/font/google"
 
 import "./globals.css"
+import { Suspense } from "react"
 import { PwaRegister } from "@/components/pwa/pwa-register"
+import { RouteProgress } from "@/components/route-progress"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { I18nProvider } from "@/lib/i18n/client"
@@ -65,6 +67,10 @@ export default async function RootLayout({
     >
       <body className={fontTelugu.className}>
         <PwaRegister />
+        {/* Suspense: useSearchParams in a client component needs a boundary. */}
+        <Suspense>
+          <RouteProgress />
+        </Suspense>
         <ThemeProvider>
           <I18nProvider locale={locale}>
             <TooltipProvider>{children}</TooltipProvider>

@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { ProfileMenu } from "@/components/chat/profile-menu"
+import { ChatSkeleton } from "@/components/page-skeleton"
 import type { Dictionary } from "@/lib/i18n/dictionaries"
 import { useI18n } from "@/lib/i18n/client"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
@@ -811,9 +812,7 @@ export function Chat(props: ChatProps) {
     setInitialMessages(loadChat(props.userId))
   }, [props.userId])
 
-  if (!initialMessages) {
-    return <div className="h-dvh bg-muted dark:bg-background" />
-  }
+  if (!initialMessages) return <ChatSkeleton />
   return (
     <PromptInputProvider>
       <ChatInner {...props} initialMessages={initialMessages} />
