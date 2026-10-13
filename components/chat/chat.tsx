@@ -505,14 +505,7 @@ function ChatInner({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <ProfileMenu
-            username={username}
-            isAdmin={isAdmin}
-            largeText={largeText}
-            onToggleTextSize={toggleTextSize}
-            guest={guest}
-          />
-          {messages.length > 0 && (
+           {messages.length > 0 && (
             <Dialog>
               <DialogTrigger asChild>
                 <Button
@@ -522,7 +515,7 @@ function ChatInner({
                   aria-label={t.chat.clearChat}
                   disabled={busy}
                 >
-                  <Trash2Icon />
+                   <Trash2Icon />
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -552,6 +545,14 @@ function ChatInner({
               </DialogContent>
             </Dialog>
           )}
+          <ProfileMenu
+            username={username}
+            isAdmin={isAdmin}
+            largeText={largeText}
+            onToggleTextSize={toggleTextSize}
+            guest={guest}
+          />
+         
         </div>
       </header>
 
