@@ -138,6 +138,12 @@ export async function resetUserPassword(
       })
       .eq("id", userId)
     if (error) throw error
+    // An admin's second device is signed out too (column from migration 0011;
+    // ignored if not run yet).
+    await getSupabase()
+      .from("app_users")
+      .update({ prev_session_token_hash: null })
+      .eq("id", userId)
     return { ok: true, recoveryCode }
   })
 }

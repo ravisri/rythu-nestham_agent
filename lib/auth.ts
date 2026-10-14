@@ -1,6 +1,8 @@
 // Server-only account/session helpers (username or phone + password, no OTP).
 // One session per user: a new login replaces session_token_hash, so the
-// previous device is signed out on its next request.
+// previous device is signed out on its next request. Admins get 2 devices:
+// the second-newest session is kept in prev_session_token_hash (migration 0011);
+// a 3rd admin login drops the oldest.
 import {
   createHash,
   randomBytes,
@@ -93,11 +95,17 @@ async function setSessionCookie(token: string) {
   })
 }
 
-// Signs the user in on this device (and out everywhere else).
+// Migration 0011 not run yet: fall back to one session for everyone.
+const noSecondSlot = (error: unknown) =>
+  /42703|PGRST204|prev_session_token_hash/.test(JSON.stringify(error))
+
+// Signs the user in on this device and out everywhere else; admins keep their
+// most recent other device too (max 2).
 export async function startSession(
   user: Pick<AppUserRecord, "id" | "trusted_devices">,
   deviceId?: string
 ) {
+  const db = getSupabase()
   const token = randomBytes(32).toString("base64url")
   const devices = deviceId
     ? [
@@ -106,10 +114,28 @@ export async function startSession(
       ].slice(-MAX_TRUSTED_DEVICES)
     : user.trusted_devices
 
-  const { error } = await getSupabase()
+  // The session already on this phone (re-login) must not count as "other device".
+  const old = (await cookies()).get(SESSION_COOKIE)?.value
+  const thisDevice = old ? sha256(old) : undefined
+  const { data: row, error: readError } = await db
+    .from("app_users")
+    .select("role, session_token_hash, prev_session_token_hash")
+    .eq("id", user.id)
+    .maybeSingle()
+  if (readError && !noSecondSlot(readError)) throw readError
+  const twoSlots = !readError
+  const keep =
+    twoSlots && row?.role === "admin"
+      ? ([row.session_token_hash, row.prev_session_token_hash].find(
+          (h) => h && h !== thisDevice
+        ) ?? null)
+      : null
+
+  const { error } = await db
     .from("app_users")
     .update({
       session_token_hash: sha256(token),
+      ...(twoSlots && { prev_session_token_hash: keep }),
       trusted_devices: devices,
       failed_logins: 0,
       locked_until: null,
@@ -123,13 +149,26 @@ export async function startSession(
 export async function getCurrentUser(): Promise<AppUser | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value
   if (!token) return null
-  const { data, error } = await getSupabase()
+  const hash = sha256(token)
+  const db = getSupabase()
+  // Newest session of anyone, or an admin's second device.
+  const { data, error } = await db
     .from("app_users")
     .select(USER_COLUMNS)
-    .eq("session_token_hash", sha256(token))
+    .or(
+      `session_token_hash.eq.${hash},and(prev_session_token_hash.eq.${hash},role.eq.admin)`
+    )
     .maybeSingle()
-  if (error) throw error
-  return data as AppUser | null
+  if (!error) return data as AppUser | null
+  if (!noSecondSlot(error)) throw error
+
+  const single = await db
+    .from("app_users")
+    .select(USER_COLUMNS)
+    .eq("session_token_hash", hash)
+    .maybeSingle()
+  if (single.error) throw single.error
+  return single.data as AppUser | null
 }
 
 // Sliding expiry so farmers are never logged out (Route Handlers / Actions only).
@@ -143,11 +182,19 @@ export async function endSession() {
   const store = await cookies()
   const token = store.get(SESSION_COOKIE)?.value
   if (token) {
-    const { error } = await getSupabase()
+    const db = getSupabase()
+    const hash = sha256(token)
+    const { error } = await db
       .from("app_users")
       .update({ session_token_hash: null })
-      .eq("session_token_hash", sha256(token))
+      .eq("session_token_hash", hash)
     if (error) throw error
+    // Admin's second device: only this slot is cleared, the other phone stays in.
+    const second = await db
+      .from("app_users")
+      .update({ prev_session_token_hash: null })
+      .eq("prev_session_token_hash", hash)
+    if (second.error && !noSecondSlot(second.error)) throw second.error
   }
   store.delete(SESSION_COOKIE)
 }
