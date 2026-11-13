@@ -1,8 +1,8 @@
 // Server-only AI token tracking (model_usage, guest_usage tokens) for /admin/usage.
 // Recording never throws: a tracking failure must not break a farmer's answer.
 import { APICallError } from "ai"
+import { db } from "@/lib/db"
 import { istDay } from "@/lib/plans"
-import { getSupabase } from "@/lib/supabase"
 
 export type Audience = "user" | "guest"
 
@@ -25,16 +25,13 @@ export async function recordModelUsage(entry: {
   error?: unknown
 }) {
   const failed = entry.error !== undefined
-  const { error } = await getSupabase().rpc("add_model_usage", {
-    p_day: istDay(),
-    p_model: entry.model,
-    p_audience: entry.audience,
-    p_in: entry.tokensIn ?? 0,
-    p_out: entry.tokensOut ?? 0,
-    p_error: failed,
-    p_quota: failed && isQuotaError(entry.error),
-  })
-  if (error) console.error("recordModelUsage failed:", error)
+  const quota = failed && isQuotaError(entry.error)
+  await db()`
+    select add_model_usage(${istDay()}::date, ${entry.model}, ${entry.audience},
+      ${entry.tokensIn ?? 0}::bigint, ${entry.tokensOut ?? 0}::bigint,
+      ${failed}::boolean, ${quota}::boolean)`.catch((error) =>
+    console.error("recordModelUsage failed:", error)
+  )
 }
 
 export async function recordGuestTokens(
@@ -42,27 +39,24 @@ export async function recordGuestTokens(
   tokensIn: number,
   tokensOut: number
 ) {
-  const { error } = await getSupabase().rpc("add_guest_tokens", {
-    p_guest: `g:${guestId}`,
-    p_day: istDay(),
-    p_in: tokensIn,
-    p_out: tokensOut,
-  })
-  if (error) console.error("recordGuestTokens failed:", error)
+  await db()`
+    select add_guest_tokens(${`g:${guestId}`}, ${istDay()}::date,
+      ${tokensIn}::bigint, ${tokensOut}::bigint)`.catch((error) =>
+    console.error("recordGuestTokens failed:", error)
+  )
 }
 
 // All guest tokens today (for the admin's optional daily guest budget).
 export async function guestTokensToday(): Promise<number> {
-  const { data, error } = await getSupabase()
-    .from("model_usage")
-    .select("tokens_in, tokens_out")
-    .eq("day", istDay())
-    .eq("audience", "guest")
-  if (error) return 0
-  return (data ?? []).reduce(
-    (sum, r) => sum + Number(r.tokens_in) + Number(r.tokens_out),
-    0
-  )
+  try {
+    const [{ total }] = await db()`
+      select coalesce(sum(tokens_in + tokens_out), 0)::text as total
+      from model_usage
+      where day = ${istDay()}::date and audience = 'guest'`
+    return Number(total)
+  } catch {
+    return 0
+  }
 }
 
 export type ModelUsageRow = {
@@ -77,20 +71,20 @@ export type ModelUsageRow = {
   last_error_at: string | null
 }
 
-// Last `days` days of model_usage (empty if migration 0007 is not run yet).
+// Last `days` days of model_usage (empty on a DB error).
 export async function modelUsage(days: number): Promise<ModelUsageRow[]> {
   const from = istDay(new Date(Date.now() - (days - 1) * 86_400_000))
-  const { data, error } = await getSupabase()
-    .from("model_usage")
-    .select("*")
-    .gte("day", from)
-    .order("day", { ascending: false })
-  if (error) return []
-  return (data ?? []).map((r) => ({
-    ...r,
-    tokens_in: Number(r.tokens_in),
-    tokens_out: Number(r.tokens_out),
-  })) as ModelUsageRow[]
+  try {
+    const rows = await db()`
+      select * from model_usage where day >= ${from}::date order by day desc`
+    return rows.map((r) => ({
+      ...r,
+      tokens_in: Number(r.tokens_in),
+      tokens_out: Number(r.tokens_out),
+    })) as ModelUsageRow[]
+  } catch {
+    return []
+  }
 }
 
 // Models with quota / rate-limit errors today (admin alert banner).
@@ -110,11 +104,10 @@ export type TopUser = {
 export async function topUsers(days: number, limit = 20): Promise<TopUser[]> {
   const today = istDay()
   const from = istDay(new Date(Date.now() - (days - 1) * 86_400_000))
-  const { data, error } = await getSupabase()
-    .from("usage_daily")
-    .select("user_id, day, credits, tokens_in, tokens_out")
-    .gte("day", from)
-  if (error || !data?.length) return []
+  const data = await db()`
+    select user_id, day, credits, tokens_in, tokens_out
+    from usage_daily where day >= ${from}::date`.catch(() => null)
+  if (!data?.length) return []
 
   const totals = new Map<string, Omit<TopUser, "id" | "username">>()
   for (const r of data) {
@@ -132,11 +125,11 @@ export async function topUsers(days: number, limit = 20): Promise<TopUser[]> {
   const ids = [...totals.keys()]
     .sort((a, b) => totals.get(b)!.periodTokens - totals.get(a)!.periodTokens)
     .slice(0, limit)
-  const { data: users } = await getSupabase()
-    .from("app_users")
-    .select("id, username")
-    .in("id", ids)
-  const names = new Map((users ?? []).map((u) => [u.id, u.username as string]))
+  const users = await db()`
+    select id, username from app_users where id = any(${ids}::uuid[])`.catch(
+    () => []
+  )
+  const names = new Map(users.map((u) => [u.id, u.username as string]))
   return ids.map((id) => ({
     id,
     username: names.get(id) ?? "?",
@@ -148,14 +141,12 @@ export type GuestRow = { id: string; questions: number; tokens: number }
 
 // Guests today: how many, and who used the most tokens (ids shortened).
 export async function guestsToday(limit = 10) {
-  const { data, error } = await getSupabase()
-    .from("guest_usage")
-    .select("key, questions, tokens_in, tokens_out")
-    .eq("day", istDay())
-    .like("key", "g:%")
-  if (error || !data) return { count: 0, questions: 0, top: [] as GuestRow[] }
+  const data = await db()`
+    select key, questions, tokens_in, tokens_out from guest_usage
+    where day = ${istDay()}::date and key like 'g:%'`.catch(() => null)
+  if (!data) return { count: 0, questions: 0, top: [] as GuestRow[] }
   const rows: GuestRow[] = data.map((r) => ({
-    id: r.key.slice(2, 8),
+    id: (r.key as string).slice(2, 8),
     questions: r.questions,
     tokens: Number(r.tokens_in ?? 0) + Number(r.tokens_out ?? 0),
   }))

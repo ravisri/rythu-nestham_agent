@@ -1,8 +1,8 @@
 // Usage: npm run create-admin <username> <password> [phone]
 // Creates an admin account, or promotes an existing user to admin and sets
-// the given password. Needs NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.
+// the given password. Needs DATABASE_URL (Neon) in .env.local.
 import { findUser, hashSecret, newRecoveryCode } from "@/lib/auth"
-import { getSupabase } from "@/lib/supabase"
+import { db, pgCode } from "@/lib/db"
 import { adminCreateSchema } from "@/lib/validation"
 
 async function main() {
@@ -22,37 +22,30 @@ async function main() {
   }
 
   const values = parsed.data
-  const db = getSupabase()
   const existing = await findUser(values.username)
 
   if (existing) {
-    const { error } = await db
-      .from("app_users")
-      .update({
-        role: "admin",
-        password_hash: await hashSecret(values.password),
-        failed_logins: 0,
-        locked_until: null,
-      })
-      .eq("id", existing.id)
-    if (error) throw error
+    await db()`
+      update app_users set role = 'admin',
+        password_hash = ${await hashSecret(values.password)},
+        failed_logins = 0, locked_until = null
+      where id = ${existing.id}::uuid`
     console.log(`"${values.username}" is now an admin. Password updated.`)
     return
   }
 
   const recoveryCode = newRecoveryCode()
-  const { error } = await db.from("app_users").insert({
-    username: values.username,
-    phone: values.phone || null,
-    role: "admin",
-    plan: values.plan,
-    password_hash: await hashSecret(values.password),
-    recovery_code_hash: await hashSecret(recoveryCode),
-  })
-  if (error?.code === "23505") {
-    throw new Error("This phone number already belongs to another account.")
+  try {
+    await db()`
+      insert into app_users (username, phone, role, plan, password_hash, recovery_code_hash)
+      values (${values.username}, ${values.phone || null}, 'admin', ${values.plan},
+        ${await hashSecret(values.password)}, ${await hashSecret(recoveryCode)})`
+  } catch (error) {
+    if (pgCode(error) === "23505") {
+      throw new Error("This phone number already belongs to another account.")
+    }
+    throw error
   }
-  if (error) throw error
   console.log(`Admin "${values.username}" created.`)
   console.log(`Recovery code (keep it safe): ${recoveryCode}`)
 }

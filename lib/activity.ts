@@ -1,7 +1,7 @@
 // Server-only: daily active guests / signed-in users for the admin (counts only).
 // Guest detail rows are kept for the current + previous IST month, then purged.
+import { db } from "@/lib/db"
 import { istDay } from "@/lib/plans"
-import { getSupabase } from "@/lib/supabase"
 
 export type ActivityDay = {
   day: string
@@ -18,16 +18,22 @@ export function activityFrom(today = istDay()): string {
   return `${prev.y}-${String(prev.m).padStart(2, "0")}-01`
 }
 
-// Newest day first. Empty if migration 0010 isn't run yet.
+// Newest day first. Empty on a DB error.
 export async function getActivity(): Promise<ActivityDay[]> {
-  const { data, error } = await getSupabase().rpc("activity_by_day", {
-    p_from: activityFrom(),
-  })
-  if (error) {
-    console.error("getActivity failed:", error.message)
+  try {
+    const rows = await db()`
+      select * from activity_by_day(${activityFrom()}::date)`
+    return rows.map((r) => ({
+      day: r.day,
+      guests: Number(r.guests),
+      guest_requests: Number(r.guest_requests),
+      users: Number(r.users),
+      user_requests: Number(r.user_requests),
+    }))
+  } catch (error) {
+    console.error("getActivity failed:", (error as Error).message)
     return []
   }
-  return data as ActivityDay[]
 }
 
 // At most once per IST day per server: drop guest rows older than last month.
@@ -37,9 +43,7 @@ export function cleanupGuestUsage() {
   const today = istDay()
   if (cleanedOn === today) return
   cleanedOn = today
-  void getSupabase()
-    .rpc("purge_guest_usage", { p_before: activityFrom(today) })
-    .then(({ error }) => {
-      if (error) console.error("purge_guest_usage failed:", error.message)
-    })
+  void db()`select purge_guest_usage(${activityFrom(today)}::date)`.catch(
+    (error) => console.error("purge_guest_usage failed:", error.message)
+  )
 }

@@ -19,7 +19,7 @@ import { Progress } from "@/components/ui/progress"
 import { getCurrentUser } from "@/lib/auth"
 import { getDictionary } from "@/lib/i18n/server"
 import { formatIstDate, PLAN_STATUS, PLANS, planStatus } from "@/lib/plans"
-import { getSupabase } from "@/lib/supabase"
+import { db } from "@/lib/db"
 import { usageSummary, usedCredits } from "@/lib/usage"
 import { byokModelId } from "@/lib/ai"
 import { getAiSettings } from "@/lib/ai-settings"
@@ -68,12 +68,9 @@ export default async function ProfilePage() {
   const [used, summary, created, ownKey, aiSettings] = await Promise.all([
     usedCredits([user]).then((m) => m.get(user.id)!),
     usageSummary(user),
-    getSupabase()
-      .from("app_users")
-      .select("created_at")
-      .eq("id", user.id)
-      .single()
-      .then(({ data }) => (data?.created_at as string | undefined) ?? null),
+    db()`select created_at from app_users where id = ${user.id}::uuid`.then(
+      (rows) => (rows[0]?.created_at as string | undefined) ?? null
+    ),
     getUserGoogleKey(user.id),
     getAiSettings(),
   ])

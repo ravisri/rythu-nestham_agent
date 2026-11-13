@@ -1,8 +1,8 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto"
 
-// Encrypts admin-entered API keys before they are stored in Supabase.
-// The key is derived from AI_SETTINGS_SECRET, else SUPABASE_SERVICE_ROLE_KEY, so
-// no new env var is needed. Rotating that secret makes saved keys unreadable:
+// Encrypts admin-entered / users' API keys before they are stored in the DB.
+// The key is derived from AI_SETTINGS_SECRET (SUPABASE_SERVICE_ROLE_KEY: legacy
+// fallback). Rotating that secret makes saved keys unreadable:
 // the app then falls back to .env keys until the admin enters them again.
 
 function key(): Buffer {

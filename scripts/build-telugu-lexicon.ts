@@ -5,7 +5,7 @@
 import { writeFile } from "node:fs/promises"
 import path from "node:path"
 import { CURATED_WORDS } from "@/lib/telugu-translit"
-import { getSupabase } from "@/lib/supabase"
+import { db } from "@/lib/db"
 
 // Everyday words farmers type that guides rarely contain.
 const EVERYDAY = [
@@ -17,11 +17,8 @@ const EVERYDAY = [
 async function main() {
   const counts = new Map<string, number>()
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await getSupabase()
-      .from("crop_knowledge")
-      .select("content")
-      .range(from, from + 999)
-    if (error) throw error
+    const data = await db()`
+      select content from crop_knowledge order by id limit 1000 offset ${from}`
     for (const { content } of data as { content: string }[]) {
       const words = content.replace(/[‌‍]/g, "").match(/[ఀ-౿]+/g)
       for (const word of words ?? []) {

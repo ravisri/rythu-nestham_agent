@@ -2,7 +2,7 @@ import { embed, embedMany } from "ai"
 import { embedOptions as options, embeddingModel } from "@/lib/ai"
 import { redactBanned } from "@/lib/banned-pesticides"
 import type { Crop } from "@/lib/crops"
-import { getSupabase } from "@/lib/supabase"
+import { db, toVector } from "@/lib/db"
 
 export async function embedQuery(text: string): Promise<number[]> {
   const { embedding } = await embed({
@@ -62,14 +62,9 @@ function diverse(rows: Match[]): Match[] {
 }
 
 async function match(embedding: number[], crops: string[] | null) {
-  const { data, error } = await getSupabase().rpc("match_crop_knowledge", {
-    query_embedding: embedding,
-    match_threshold: MIN_SIMILARITY,
-    match_count: CANDIDATES,
-    crops,
-  })
-  if (error) throw error
-  const rows = (data ?? []) as Match[]
+  const rows = (await db()`
+    select * from match_crop_knowledge(${toVector(embedding)}::vector,
+      ${MIN_SIMILARITY}::float, ${CANDIDATES}::int, ${crops}::text[])`) as Match[]
   const best = rows[0]?.similarity ?? 0
   return rows.filter((row) => row.similarity >= best - MAX_GAP)
 }

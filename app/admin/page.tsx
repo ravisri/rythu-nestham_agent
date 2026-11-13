@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
-import { getCurrentUser, USER_COLUMNS, type AppUser } from "@/lib/auth"
+import { getCurrentUser, type AppUser } from "@/lib/auth"
 import { getDictionary } from "@/lib/i18n/server"
 import {
   hasPeriodLimit,
@@ -23,7 +23,7 @@ import {
   PLANS,
   planStatus,
 } from "@/lib/plans"
-import { getSupabase } from "@/lib/supabase"
+import { db } from "@/lib/db"
 import { quotaAlerts } from "@/lib/token-usage"
 import { usedCredits } from "@/lib/usage"
 
@@ -44,16 +44,15 @@ export default async function AdminPage({
   const q = ((await searchParams).q ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9_]/g, "")
-  let query = getSupabase()
-    .from("app_users")
-    .select(USER_COLUMNS)
-    .order("created_at", { ascending: false })
-    .limit(50)
-  if (q) query = query.or(`username.ilike.%${q}%,phone.ilike.%${q}%`)
-  const { data, error } = await query
-  if (error) throw error
-
-  const users = data as AppUser[]
+  // Search text is a parameter; % and _ are matched literally.
+  const like = q ? `%${q.replace(/[\\%_]/g, "\\$&")}%` : null
+  const users = (await db()`
+    select id, username, phone, role, plan, trial_ends_at, plan_expires_at
+    from app_users
+    where ${like}::text is null
+       or username ilike ${like} or phone ilike ${like}
+    order by created_at desc
+    limit 50`) as AppUser[]
   const usage = await usedCredits(users)
 
   return (

@@ -1,6 +1,6 @@
 import { AI_PROVIDERS, type AiProvider } from "@/lib/ai-models"
 import { decrypt } from "@/lib/secrets"
-import { getSupabase } from "@/lib/supabase"
+import { db } from "@/lib/db"
 
 // Admin-managed model + API key overrides (/admin/ai), stored in ai_settings
 // (supabase/migrations/0004_ai_settings.sql). Server-only: holds plain API keys.
@@ -38,13 +38,8 @@ const TTL_MS = 30_000
 let cache: { at: number; value: Promise<AiSettings> } | undefined
 
 export async function readSettingsRow(): Promise<AiSettingsRow | null> {
-  const { data, error } = await getSupabase()
-    .from("ai_settings")
-    .select("*") // "*": works before and after migration 0007
-    .eq("id", 1)
-    .maybeSingle()
-  if (error) throw error
-  return data
+  const rows = await db()`select * from ai_settings where id = 1`
+  return (rows[0] as AiSettingsRow | undefined) ?? null
 }
 
 async function load(): Promise<AiSettings> {
@@ -71,7 +66,7 @@ async function load(): Promise<AiSettings> {
       unreadable,
     }
   } catch (error) {
-    // Table not migrated yet / Supabase down: keep working on .env values.
+    // Table not migrated yet / database down: keep working on .env values.
     console.error(
       "AI settings unavailable, using env:",
       (error as Error).message

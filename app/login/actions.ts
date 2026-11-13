@@ -11,7 +11,7 @@ import {
   verifySecret,
 } from "@/lib/auth"
 import { istDay } from "@/lib/plans"
-import { getSupabase } from "@/lib/supabase"
+import { db, pgCode } from "@/lib/db"
 import {
   deviceIdSchema,
   forgotSchema,
@@ -54,28 +54,27 @@ export async function signup(
 
   return guard<{ recoveryCode: string }>(async () => {
     const recoveryCode = newRecoveryCode()
-    const { data, error } = await getSupabase()
-      .from("app_users")
-      .insert({
-        username,
-        phone: phone || null,
-        password_hash: await hashSecret(password),
-        recovery_code_hash: await hashSecret(recoveryCode),
-      })
-      .select("id, trusted_devices")
-      .single()
-
-    if (error?.code === "23505") {
+    let created
+    try {
+      ;[created] = await db()`
+        insert into app_users (username, phone, password_hash, recovery_code_hash)
+        values (${username}, ${phone || null}, ${await hashSecret(password)},
+          ${await hashSecret(recoveryCode)})
+        returning id, trusted_devices`
+    } catch (error) {
+      if (pgCode(error) !== "23505") throw error
       return {
         ok: false,
-        error: error.message.includes("phone")
+        error: String((error as Error).message).includes("phone")
           ? "ఈ ఫోన్ నంబర్‌తో ఇప్పటికే ఖాతా ఉంది."
           : "ఈ యూజర్‌నేమ్ ఇప్పటికే ఉంది. వేరేది ఎంచుకోండి.",
       }
     }
-    if (error) throw error
 
-    await startSession(data, device.data)
+    await startSession(
+      created as { id: string; trusted_devices: string[] },
+      device.data
+    )
     return { ok: true, recoveryCode }
   })
 }
@@ -102,15 +101,13 @@ export async function login(
     if (!(await verifySecret(parsed.data.password, user.password_hash))) {
       const failed = user.failed_logins + 1
       const locked = failed >= MAX_FAILED_LOGINS
-      await getSupabase()
-        .from("app_users")
-        .update({
-          failed_logins: locked ? 0 : failed,
-          locked_until: locked
-            ? new Date(Date.now() + LOCK_MINUTES * 60_000).toISOString()
-            : null,
-        })
-        .eq("id", user.id)
+      const lockedUntil = locked
+        ? new Date(Date.now() + LOCK_MINUTES * 60_000).toISOString()
+        : null
+      await db()`
+        update app_users set failed_logins = ${locked ? 0 : failed},
+          locked_until = ${lockedUntil}::timestamptz
+        where id = ${user.id}::uuid`
       return { ok: false, error: WRONG_LOGIN }
     }
 
@@ -169,19 +166,19 @@ export async function resetPassword(
       (recoveryCode !== "" &&
         (await verifySecret(recoveryCode, user.recovery_code_hash)))
 
-    const { error } = await getSupabase()
-      .from("app_users")
-      .update({
-        reset_day: today,
-        reset_count: attempts + 1,
-        ...(allowed && {
-          password_hash: await hashSecret(password),
-          failed_logins: 0,
-          locked_until: null,
-        }),
-      })
-      .eq("id", user.id)
-    if (error) throw error
+    if (allowed) {
+      await db()`
+        update app_users set reset_day = ${today}::date,
+          reset_count = ${attempts + 1},
+          password_hash = ${await hashSecret(password)},
+          failed_logins = 0, locked_until = null
+        where id = ${user.id}::uuid`
+    } else {
+      await db()`
+        update app_users set reset_day = ${today}::date,
+          reset_count = ${attempts + 1}
+        where id = ${user.id}::uuid`
+    }
 
     if (!allowed) {
       return {

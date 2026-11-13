@@ -13,7 +13,7 @@
 // for rows stored before change tracking (metadata.file_hash) existed.
 //        npm run ingest:ocr              (only fill the OCR cache, no embedding / DB writes)
 // Re-running continues where it stopped: stored sections are skipped, OCR pages come from data/ocr/.
-// Needs in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and the API key
+// Needs in .env.local: DATABASE_URL (Neon) and the API key
 // for the OCR_MODEL / EMBEDDING_MODEL providers (default Google: GOOGLE_GENERATIVE_AI_API_KEY).
 // OCR (only when the PDF text layer is garbled): Google Vision if GOOGLE_VISION_API_KEY is
 // set (per-page price, cheapest), else LLM OCR via OCR_MODEL. Force with OCR_ENGINE=vision|llm.
@@ -37,7 +37,7 @@ import {
   visionOcr,
 } from "@/lib/ocr"
 import { embedDocuments } from "@/lib/rag"
-import { getSupabase } from "@/lib/supabase"
+import { db, toVector } from "@/lib/db"
 import { junkReason } from "@/lib/text-quality"
 
 const ROOT = path.join(process.cwd(), "data", "pdfs")
@@ -405,12 +405,11 @@ async function storedElsewhere(
 ): Promise<Map<string, string>> {
   const found = new Map<string, string>() // hash -> source that has it
   for (let i = 0; i < hashes.length; i += 100) {
-    const { data, error } = await getSupabase()
-      .from("crop_knowledge")
-      .select("hash:metadata->>hash, source:metadata->>source")
-      .in("metadata->>hash", hashes.slice(i, i + 100))
-      .neq("metadata->>source", source)
-    if (error) throw error
+    const data = await db()`
+      select metadata->>'hash' as hash, metadata->>'source' as source
+      from crop_knowledge
+      where metadata->>'hash' = any(${hashes.slice(i, i + 100)}::text[])
+        and metadata->>'source' <> ${source}`
     for (const row of data as { hash: string; source: string }[]) {
       found.set(row.hash, row.source)
     }
@@ -422,15 +421,11 @@ type StoredRow = { id: string; metadata: Record<string, string | undefined> }
 
 // This file's (or manifest section's) rows already in crop_knowledge.
 async function storedRows(job: Job, source: string): Promise<StoredRow[]> {
-  const query = getSupabase()
-    .from("crop_knowledge")
-    .select("id, metadata")
-    .eq("metadata->>source", source)
-  const { data, error } = job.section
-    ? await query.eq("metadata->>section", job.section)
-    : await query
-  if (error) throw error
-  return data as StoredRow[]
+  const section = job.section ?? null
+  return (await db()`
+    select id, metadata from crop_knowledge
+    where metadata->>'source' = ${source}
+      and (${section}::text is null or metadata->>'section' = ${section})`) as StoredRow[]
 }
 
 // Has the file changed since its rows were stored? (metadata.file_hash)
@@ -454,7 +449,6 @@ async function store(
   fileHash: string,
   state?: string
 ): Promise<StoreResult> {
-  const supabase = getSupabase()
   // Same text twice in one file -> stored once.
   const unique = new Map<string, Piece>()
   for (const piece of all) unique.set(hashOf(piece.content), unique.get(hashOf(piece.content)) ?? piece)
@@ -503,17 +497,19 @@ async function store(
       },
       embedding: embeddings[j],
     }))
-    const { error } = await supabase.from("crop_knowledge").insert(rows)
-    if (error) throw error
+    // One statement: the whole batch is stored or none of it.
+    await db()`
+      insert into crop_knowledge (content, metadata, embedding)
+      select r.content, r.metadata, r.embedding::vector
+      from jsonb_to_recordset(${JSON.stringify(
+        rows.map((r) => ({ ...r, embedding: toVector(r.embedding) }))
+      )}::jsonb) as r(content text, metadata jsonb, embedding text)`
     if (i + BATCH < pieces.length) await sleep(EMBED_PAUSE_MS)
   }
 
   for (let i = 0; i < remove.length; i += 100) {
-    const { error } = await supabase
-      .from("crop_knowledge")
-      .delete()
-      .in("id", remove.slice(i, i + 100))
-    if (error) throw error
+    await db()`
+      delete from crop_knowledge where id = any(${remove.slice(i, i + 100)}::uuid[])`
   }
 
   // Kept rows: record the new file version (and page numbers, which can shift).
@@ -527,11 +523,9 @@ async function store(
         const { pages } = unique.get(row.metadata.hash!)!
         const metadata = { ...row.metadata, file_hash: fileHash, pages }
         if (!pages) delete metadata.pages
-        const { error } = await supabase
-          .from("crop_knowledge")
-          .update({ metadata })
-          .eq("id", row.id)
-        if (error) throw error
+        await db()`
+          update crop_knowledge set metadata = ${JSON.stringify(metadata)}::jsonb
+          where id = ${row.id}::uuid`
       })
     )
   }
@@ -540,13 +534,11 @@ async function store(
 
 // The same file under another name / folder is never embedded twice.
 async function storedAs(fileHash: string, source: string) {
-  const { data, error } = await getSupabase()
-    .from("crop_knowledge")
-    .select("source:metadata->>source")
-    .eq("metadata->>file_hash", fileHash)
-    .neq("metadata->>source", source)
-    .limit(1)
-  if (error) throw error
+  const data = await db()`
+    select metadata->>'source' as source from crop_knowledge
+    where metadata->>'file_hash' = ${fileHash}
+      and metadata->>'source' <> ${source}
+    limit 1`
   return (data as { source: string }[])[0]?.source
 }
 

@@ -30,7 +30,7 @@ An AI Agent application empowering farmers in Telangana & Andhra Pradesh. The ap
 - `app/api/chat/route.ts` — Vercel AI SDK backend route handling Gemini multimodal calls & RAG tools
 - `app/page.tsx` — Main Telugu Voice & Camera UI built with `shadcn/ui`
 - `components/ui/` — `shadcn/ui` primitive components (`button.tsx`, `card.tsx`, `input.tsx`)
-- `lib/supabase.ts` — Supabase client configuration for pgvector searches
+- `lib/db.ts` — Neon Postgres (`DATABASE_URL`, `@neondatabase/serverless` HTTP driver) for all data incl. pgvector search. Use `` db()`...${value}` `` (always parameterized); timestamps come back as ISO strings, dates as `yyyy-mm-dd`. SQL schema/functions: `supabase/migrations/` (run them on Neon). No supabase-js.
 - `scripts/ingest-pdf.ts` — TypeScript ingestion (`npm run ingest`) for ANGRAU/ICAR files in `data/pdfs/<crop>/`; Gemini `gemini-embedding-001` @768 dims → `crop_knowledge`
 - `lib/rag.ts` — embedding + `match_crop_knowledge` search (banned-pesticide sentences redacted via `lib/banned-pesticides.ts`)
 - `components/chat/` — Telugu chat UI (AI Elements + shadcn); `hooks/` — Web Speech STT/TTS (`te-IN`)

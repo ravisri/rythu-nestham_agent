@@ -16,7 +16,7 @@ import {
   type AppUser,
 } from "@/lib/auth"
 import { encrypt } from "@/lib/secrets"
-import { getSupabase } from "@/lib/supabase"
+import { db, pgCode } from "@/lib/db"
 import {
   adminCreateSchema,
   adminPasswordSchema,
@@ -55,15 +55,6 @@ async function asAdmin<T>(
   }
 }
 
-// Clears login lockout and today's "forgot password" attempts, so a user
-// helped by the admin can sign in / reset again the same day.
-const UNLOCK = {
-  failed_logins: 0,
-  locked_until: null,
-  reset_count: 0,
-  reset_day: null,
-}
-
 // yyyy-mm-dd -> end of that day in India
 const endOfDayIst = (day: string) => `${day}T23:59:59+05:30`
 
@@ -76,24 +67,20 @@ export async function createUser(
 
   return asAdmin<{ recoveryCode: string }>(async () => {
     const recoveryCode = newRecoveryCode()
-    const { error } = await getSupabase()
-      .from("app_users")
-      .insert({
-        username,
-        phone: phone || null,
-        plan,
-        password_hash: await hashSecret(password),
-        recovery_code_hash: await hashSecret(recoveryCode),
-      })
-    if (error?.code === "23505") {
+    try {
+      await db()`
+        insert into app_users (username, phone, plan, password_hash, recovery_code_hash)
+        values (${username}, ${phone || null}, ${plan},
+          ${await hashSecret(password)}, ${await hashSecret(recoveryCode)})`
+    } catch (error) {
+      if (pgCode(error) !== "23505") throw error
       return {
         ok: false,
-        error: error.message.includes("phone")
+        error: String((error as Error).message).includes("phone")
           ? "ఈ ఫోన్ నంబర్‌తో ఇప్పటికే ఖాతా ఉంది."
           : "ఈ యూజర్‌నేమ్ ఇప్పటికే ఉంది.",
       }
     }
-    if (error) throw error
     return { ok: true, recoveryCode }
   })
 }
@@ -105,15 +92,18 @@ export async function updatePlan(values: AdminPlanValues): Promise<Result> {
 
   return asAdmin<object>(async () => {
     const until = expiresOn ? endOfDayIst(expiresOn) : null
-    const { error } = await getSupabase()
-      .from("app_users")
-      .update(
-        plan === "trial"
-          ? { plan, ...(until && { trial_ends_at: until }) }
-          : { plan, plan_expires_at: until }
-      )
-      .eq("id", userId)
-    if (error) throw error
+    if (plan === "trial") {
+      // No date = keep the current trial end.
+      await db()`
+        update app_users set plan = ${plan},
+          trial_ends_at = coalesce(${until}::timestamptz, trial_ends_at)
+        where id = ${userId}::uuid`
+    } else {
+      await db()`
+        update app_users set plan = ${plan},
+          plan_expires_at = ${until}::timestamptz
+        where id = ${userId}::uuid`
+    }
     return { ok: true }
   })
 }
@@ -128,22 +118,14 @@ export async function resetUserPassword(
 
   return asAdmin<{ recoveryCode: string }>(async () => {
     const recoveryCode = newRecoveryCode()
-    const { error } = await getSupabase()
-      .from("app_users")
-      .update({
-        password_hash: await hashSecret(password),
-        recovery_code_hash: await hashSecret(recoveryCode),
-        session_token_hash: null,
-        ...UNLOCK,
-      })
-      .eq("id", userId)
-    if (error) throw error
-    // An admin's second device is signed out too (column from migration 0011;
-    // ignored if not run yet).
-    await getSupabase()
-      .from("app_users")
-      .update({ prev_session_token_hash: null })
-      .eq("id", userId)
+    // Also clears lockout + today's reset attempts; both admin devices sign out.
+    await db()`
+      update app_users set
+        password_hash = ${await hashSecret(password)},
+        recovery_code_hash = ${await hashSecret(recoveryCode)},
+        session_token_hash = null, prev_session_token_hash = null,
+        failed_logins = 0, locked_until = null, reset_count = 0, reset_day = null
+      where id = ${userId}::uuid`
     return { ok: true, recoveryCode }
   })
 }
@@ -159,11 +141,12 @@ export async function issueRecoveryCode(
 
   return asAdmin<{ recoveryCode: string }>(async () => {
     const recoveryCode = newRecoveryCode()
-    const { error } = await getSupabase()
-      .from("app_users")
-      .update({ recovery_code_hash: await hashSecret(recoveryCode), ...UNLOCK })
-      .eq("id", parsed.data.userId)
-    if (error) throw error
+    // Also clears lockout + today's reset attempts, so the user can reset today.
+    await db()`
+      update app_users set
+        recovery_code_hash = ${await hashSecret(recoveryCode)},
+        failed_logins = 0, locked_until = null, reset_count = 0, reset_day = null
+      where id = ${parsed.data.userId}::uuid`
     return { ok: true, recoveryCode }
   })
 }
@@ -175,13 +158,11 @@ const modelId = (provider: AiProvider, model: string) =>
 // Missing table = migration 0004 not run yet.
 const NO_TABLE =
   "ai_settings టేబుల్ లేదు. supabase/migrations/0004_ai_settings.sql రన్ చేయండి."
-const isMissingTable = (error: unknown) =>
-  /PGRST205|42P01|ai_settings/.test(JSON.stringify(error))
+const isMissingTable = (error: unknown) => pgCode(error) === "42P01"
 // Guest model columns missing = migration 0007 not run yet.
 const NO_GUEST_COLUMNS =
   "కొత్త మోడల్ కాలమ్స్ లేవు. supabase/migrations/0007 మరియు 0009 రన్ చేయండి."
-const isMissingColumn = (error: unknown) =>
-  /PGRST204|42703|guest_|byok_/.test(JSON.stringify(error))
+const isMissingColumn = (error: unknown) => pgCode(error) === "42703"
 
 // Saves models + encrypted API keys. Empty key fields keep the saved key.
 export async function saveAiSettings(
@@ -207,25 +188,29 @@ export async function saveAiSettings(
       if (key) keys[provider] = encrypt(key)
     }
 
-    const { error } = await getSupabase()
-      .from("ai_settings")
-      .upsert({
-        id: 1,
-        chat_model: modelId(d.chatProvider, d.chatModel),
-        ocr_model: modelId(d.ocrProvider, d.ocrModel),
-        guest_model: modelId(d.guestProvider, d.guestModel),
-        guest_daily_tokens: d.guestDailyTokens
-          ? Number(d.guestDailyTokens)
-          : null,
-        byok_model: d.byokModel.replace(/^google:/, ""),
-        compat_base_url: d.compatBaseUrl || null,
-        api_keys: keys,
-        updated_by: me.id,
-        updated_at: new Date().toISOString(),
-      })
-    if (error && isMissingColumn(error))
-      return { ok: false, error: NO_GUEST_COLUMNS }
-    if (error) throw error
+    const guestTokens = d.guestDailyTokens ? Number(d.guestDailyTokens) : null
+    try {
+      await db()`
+        insert into ai_settings (id, chat_model, ocr_model, guest_model,
+          guest_daily_tokens, byok_model, compat_base_url, api_keys,
+          updated_by, updated_at)
+        values (1, ${modelId(d.chatProvider, d.chatModel)},
+          ${modelId(d.ocrProvider, d.ocrModel)},
+          ${modelId(d.guestProvider, d.guestModel)}, ${guestTokens}::int,
+          ${d.byokModel.replace(/^google:/, "")}, ${d.compatBaseUrl || null},
+          ${JSON.stringify(keys)}::jsonb, ${me.id}::uuid, now())
+        on conflict (id) do update set
+          chat_model = excluded.chat_model, ocr_model = excluded.ocr_model,
+          guest_model = excluded.guest_model,
+          guest_daily_tokens = excluded.guest_daily_tokens,
+          byok_model = excluded.byok_model,
+          compat_base_url = excluded.compat_base_url,
+          api_keys = excluded.api_keys, updated_by = excluded.updated_by,
+          updated_at = excluded.updated_at`
+    } catch (error) {
+      if (isMissingColumn(error)) return { ok: false, error: NO_GUEST_COLUMNS }
+      throw error
+    }
     invalidateAiSettings()
     return { ok: true }
   })

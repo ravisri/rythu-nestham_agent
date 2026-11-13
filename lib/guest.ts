@@ -1,14 +1,12 @@
 // Server-only metering for guests (no login): GUEST limits per IST day.
 import { cleanupGuestUsage } from "@/lib/activity"
+import { db } from "@/lib/db"
 import { GUEST, istDay } from "@/lib/plans"
-import { getSupabase } from "@/lib/supabase"
 
 export type GuestCharge = "ok" | "limit" | "photo"
 
-const keys = (guestId: string, ip: string) => ({
-  p_guest: `g:${guestId}`,
-  p_ip: `ip:${ip}`,
-})
+const guestKey = (guestId: string) => `g:${guestId}`
+const ipKeyOf = (ip: string) => `ip:${ip}`
 
 // Fails closed: on a DB error the guest is asked to sign up (no free AI calls).
 export async function chargeGuest(
@@ -17,60 +15,55 @@ export async function chargeGuest(
   photo: boolean
 ): Promise<GuestCharge> {
   cleanupGuestUsage() // monthly purge of old guest rows (once a day, background)
-  const { data, error } = await getSupabase().rpc("use_guest", {
-    ...keys(guestId, ip),
-    p_day: istDay(),
-    p_limit: GUEST.daily,
-    p_ip_limit: GUEST.ipDaily,
-    p_photo: photo,
-    p_photo_limit: GUEST.photos,
-  })
-  if (error) {
+  try {
+    const [{ result }] = await db()`
+      select use_guest(${guestKey(guestId)}, ${ipKeyOf(ip)}, ${istDay()}::date,
+        ${GUEST.daily}::int, ${GUEST.ipDaily}::int, ${photo}::boolean,
+        ${GUEST.photos}::int) as result`
+    return result === 0 ? "ok" : result === 2 ? "photo" : "limit"
+  } catch (error) {
     console.error("chargeGuest failed:", error)
     return "limit"
   }
-  return data === 0 ? "ok" : data === 2 ? "photo" : "limit"
 }
 
 export async function refundGuest(guestId: string, ip: string, photo: boolean) {
-  const { error } = await getSupabase().rpc("refund_guest", {
-    ...keys(guestId, ip),
-    p_day: istDay(),
-    p_photo: photo,
-  })
-  if (error) console.error("refundGuest failed:", error)
+  await db()`
+    select refund_guest(${guestKey(guestId)}, ${ipKeyOf(ip)}, ${istDay()}::date,
+      ${photo}::boolean)`.catch((error) =>
+    console.error("refundGuest failed:", error)
+  )
 }
 
-// "Next question" suggestions left today (0 if migration 0008 isn't run).
+// Today's guest_usage row for this cookie (undefined = none / DB error).
+async function todayRow(guestId: string) {
+  const rows = await db()`
+    select questions, suggestions from guest_usage
+    where key = ${guestKey(guestId)} and day = ${istDay()}::date`.catch(
+    () => null
+  )
+  return rows ? { row: rows[0] } : undefined
+}
+
+// "Next question" suggestions left today (0 on a DB error).
 export async function guestSuggestionsLeft(guestId: string): Promise<number> {
-  const { data, error } = await getSupabase()
-    .from("guest_usage")
-    .select("suggestions")
-    .eq("key", `g:${guestId}`)
-    .eq("day", istDay())
-    .maybeSingle()
-  if (error) return 0
-  const used = (data?.suggestions as number | undefined) ?? 0
+  const found = await todayRow(guestId)
+  if (!found) return 0
+  const used = (found.row?.suggestions as number | undefined) ?? 0
   return Math.max(0, GUEST.suggestions - used)
 }
 
 export async function addGuestSuggestion(guestId: string) {
-  const { error } = await getSupabase().rpc("add_guest_suggestion", {
-    p_guest: `g:${guestId}`,
-    p_day: istDay(),
-  })
-  if (error) console.error("addGuestSuggestion failed:", error)
+  await db()`
+    select add_guest_suggestion(${guestKey(guestId)}, ${istDay()}::date)`.catch(
+    (error) => console.error("addGuestSuggestion failed:", error)
+  )
 }
 
 // Questions left today for this guest cookie (full allowance if new).
 export async function guestLeft(guestId?: string): Promise<number> {
   if (!guestId) return GUEST.daily
-  const { data, error } = await getSupabase()
-    .from("guest_usage")
-    .select("questions")
-    .eq("key", `g:${guestId}`)
-    .eq("day", istDay())
-    .maybeSingle()
-  if (error) return GUEST.daily
-  return Math.max(0, GUEST.daily - ((data?.questions as number) ?? 0))
+  const found = await todayRow(guestId)
+  if (!found) return GUEST.daily
+  return Math.max(0, GUEST.daily - ((found.row?.questions as number) ?? 0))
 }
